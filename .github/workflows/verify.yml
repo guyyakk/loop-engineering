@@ -1,0 +1,44 @@
+name: Verify
+
+# Scaffold สำหรับขั้นตอน "Verify" ใน docs/LOOP_WORKFLOW.md
+# ให้ CI เป็นผู้ยืนยันหลักฐานแทนการเชื่อคำอธิบายของ AI/คนเพียงอย่างเดียว
+#
+# เมื่อ repo นี้เริ่มมีโค้ดจริงแล้ว ให้เลือก/แก้ไข block ด้านล่างตามเทคโนโลยีที่ใช้
+# (ดูตารางใน docs/LOOP_WORKFLOW.md หัวข้อ "3) Verify") แล้วลบ block ที่ไม่ใช้ทิ้ง
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- JavaScript/TypeScript --------------------------------------
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: 20
+      # - run: npm ci
+      # - run: npm run lint
+      # - run: npm run typecheck
+      # - run: npm test
+      # - run: npm run build
+
+      # --- Python --------------------------------------------------------
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.12"
+      # - run: pip install -r requirements.txt
+      # - run: ruff check .
+      # - run: pytest
+
+      # --- Placeholder จนกว่าจะมีโค้ดจริง ---------------------------------
+      - name: No tech stack configured yet
+        run: |
+          echo "ยังไม่มีคำสั่งตรวจสำหรับโปรเจกต์นี้"
+          echo "แก้ไฟล์นี้ (.github/workflows/verify.yml) ให้รัน lint/typecheck/test/build จริง"
+          echo "ตามเทคโนโลยีที่ใช้ ก่อนพึ่งพา CI นี้เป็นหลักฐานใน task spec"
