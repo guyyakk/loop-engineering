@@ -30,3 +30,7 @@ venv/
 
 # Logs
 *.log
+
+# clasp (Apps Script CLI)
+.clasp.json
+.clasprc.json

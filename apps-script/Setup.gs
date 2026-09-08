@@ -47,6 +47,7 @@ function setupSheets() {
     applyValidations_();
     applyFormats_();
     applyConditionalFormats_();
+    addHeaderNotes_();
   } catch (e) {
     // เกิดได้เมื่อหัวตารางไม่ตรง ทำให้หาคอลัมน์ไม่เจอ — บอกให้ชัดแทนที่จะล้มเงียบ
     setupError = String(e.message || e);
@@ -67,6 +68,56 @@ function setupSheets() {
   msg.push('');
   msg.push('ขั้นถัดไป: กรอกชื่อและอีเมลทีมในชีต people แล้วสั่ง MOM → เพิ่มการประชุมใหม่');
   ui_().alert('ตั้งค่าเริ่มต้น', msg.join('\n'), ui_().ButtonSet.OK);
+}
+
+/**
+ * ใส่คำอธิบายไว้ที่หัวตาราง (เอาเมาส์ชี้แล้วเห็น) สำหรับคนที่เผลอมากรอกในชีตตรง ๆ
+ * ปกติควรกรอกผ่านเมนู MOM → 📝 จดประชุม แทน
+ */
+var HEADER_NOTES = {};
+HEADER_NOTES[SHEET.MEETINGS] = {
+  meeting_id: 'รหัสประชุม ระบบสร้างให้เอง ห้ามแก้',
+  title: 'จำเป็น — ชื่อการประชุม',
+  date: 'จำเป็น — วันที่ประชุม รูปแบบ YYYY-MM-DD',
+  start_time: 'เวลาเริ่ม เช่น 10:00',
+  end_time: 'เวลาจบ เช่น 11:00',
+  location: 'ห้องประชุม หรือลิงก์ออนไลน์',
+  chair: 'ประธานที่ประชุม',
+  note_taker: 'จำเป็น — คนจดบันทึก',
+  attendees: 'จำเป็น — ชื่อผู้เข้าร่วม คั่นด้วย , ชื่อต้องตรงกับชีต people ถึงจะได้รับอีเมล',
+  absentees: 'คนที่ไม่ได้เข้าประชุมแต่ต้องได้รับสรุป',
+  decisions: 'มติที่ประชุม บรรทัดละ 1 ข้อ (ขึ้นบรรทัดใหม่ด้วย Alt+Enter)',
+  open_issues: 'ประเด็นค้างที่ยังไม่มีเจ้าภาพ บรรทัดละ 1 ข้อ',
+  next_meeting_at: 'วันเวลาประชุมครั้งถัดไป',
+  status: 'draft = ยังไม่ส่ง / sent = ส่งอีเมลแล้ว ระบบเขียนให้เอง',
+  sent_at: 'เวลาที่ส่งอีเมลสำเร็จ ระบบเขียนให้เอง ล้างช่องนี้ถ้าต้องการส่งซ้ำ',
+  image_url: 'ลิงก์รูปสรุปล่าสุด ระบบเขียนให้เอง'
+};
+HEADER_NOTES[SHEET.ITEMS] = {
+  item_id: 'รหัสงาน ระบบสร้างให้เอง ห้ามแก้',
+  meeting_id: 'จำเป็น — เลือกจาก dropdown ว่างานนี้มาจากประชุมไหน',
+  task: 'จำเป็น — เขียนให้ชัดว่าทำอะไร ต้องยาวกว่า 10 ตัวอักษร',
+  owner: 'จำเป็น — เลือกจาก dropdown และต้องเป็นคนเดียว ถ้าหลายคนให้แตกเป็นหลายแถว',
+  due_date: 'จำเป็น — กำหนดเสร็จ ต้องไม่ย้อนหลังกว่าวันประชุม',
+  priority: 'High / Medium / Low',
+  status: 'Open → In progress → Done (หรือ Blocked ถ้าติดปัญหา) ช่องนี้อัปเดตเองระหว่างสัปดาห์',
+  note: 'สิ่งที่ต้องรอ หรือปัญหาที่ติดอยู่'
+};
+HEADER_NOTES[SHEET.PEOPLE] = {
+  name: 'ชื่อที่จะโผล่ใน dropdown ของฟอร์มและชีตงาน',
+  email: 'อีเมลสำหรับรับสรุปการประชุม ถ้าเว้นว่างคนนี้จะไม่ได้รับเมล',
+  department: 'แผนก (ไม่บังคับ)',
+  active: 'yes = ยังอยู่ในทีม / no = ซ่อนจาก dropdown โดยไม่ต้องลบประวัติ'
+};
+
+function addHeaderNotes_() {
+  Object.keys(HEADER_NOTES).forEach(function (name) {
+    var sh = sheet_(name);
+    var notes = HEADER_NOTES[name];
+    Object.keys(notes).forEach(function (h) {
+      sh.getRange(1, colIndex_(name, h)).setNote(notes[h]);
+    });
+  });
 }
 
 function formatHeader_(sh, cols) {
@@ -194,17 +245,7 @@ function columnLetter_(index) {
 /** สร้างแถวประชุมใหม่พร้อมรหัสถัดไป แล้วพาเคอร์เซอร์ไปที่แถวนั้น */
 function addMeeting() {
   var sh = sheet_(SHEET.MEETINGS);
-  var year = new Date().getFullYear();
-  var prefix = 'MOM-' + year + '-';
-  var max = 0;
-  readTable_(SHEET.MEETINGS).forEach(function (m) {
-    var id = String(m.meeting_id || '');
-    if (id.indexOf(prefix) === 0) {
-      var n = parseInt(id.substring(prefix.length), 10);
-      if (!isNaN(n) && n > max) max = n;
-    }
-  });
-  var id = prefix + ('00' + (max + 1)).slice(-3);
+  var id = nextMeetingId_();
   var row = sh.getLastRow() + 1;
 
   sh.getRange(row, colIndex_(SHEET.MEETINGS, 'meeting_id')).setValue(id);
