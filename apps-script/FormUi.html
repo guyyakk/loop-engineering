@@ -49,6 +49,8 @@
   .result { margin:12px; padding:14px 16px; border:1px solid #b2f2bb; background:#ebfbee; border-radius:8px; display:none; }
   .result h3 { margin:0 0 8px; font-size:14px; color:#2b8a3e; }
   .result .row { margin:8px 0; }
+  .shot { display:block; width:100%; max-width:640px; border:1px solid var(--line);
+    border-radius:6px; background:#fff; }
   .link { display:inline-block; background:var(--blue); color:#fff; padding:9px 16px; border-radius:6px;
     text-decoration:none; font-weight:bold; }
   @media (max-width: 720px) {
@@ -343,10 +345,18 @@ function showResult(r) {
   }
   el('rEmail').innerHTML = email;
 
-  el('rImage').innerHTML = r.image_url
-    ? '🖼 <a class="link" href="' + r.image_url + '" target="_blank" rel="noopener">เปิดรูปเพื่อเซฟไปวางใน LINE</a>' +
-      ' <span style="font-size:12px;color:#868e96">' + (r.image_name || '') + '</span>'
-    : '⚠ สร้างรูปไม่สำเร็จ: ' + (r.image_error || 'ไม่ทราบสาเหตุ') + ' — ใช้ข้อความข้างล่างแทนได้';
+  if (r.image_data || r.image_url) {
+    var img = r.image_data
+      ? '<img class="shot" src="' + r.image_data + '" alt="' + (r.image_name || 'สรุปประชุม') + '">'
+      : '';
+    el('rImage').innerHTML = img +
+      '<div class="hint" style="margin-top:6px">มือถือ: กดค้างที่รูป → บันทึกรูปภาพ · คอม: คลิกขวา → Save image as' +
+      (r.image_url ? ' · <a href="' + r.image_url + '" target="_blank" rel="noopener">เปิดใน Drive</a>' : '') +
+      ' · ' + (r.image_name || '') + '</div>';
+  } else {
+    el('rImage').innerHTML = '⚠ สร้างรูปไม่สำเร็จ: ' + (r.image_error || 'ไม่ทราบสาเหตุ') +
+      ' — ใช้ข้อความข้างล่างแทนได้';
+  }
 
   el('rText').value = r.line_text || '';
   el('result').style.display = 'block';

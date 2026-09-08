@@ -107,6 +107,7 @@ function webFinish(p) {
     setCell_(SHEET.MEETINGS, meeting._row, 'image_url', img.url);
     out.image_url = img.url;
     out.image_name = img.name;
+    out.image_data = 'data:image/png;base64,' + img.base64;
   } catch (e) {
     // รูปพังไม่ควรทำให้ทั้งขั้นตอนล้ม เพราะอีเมลส่งไปแล้ว
     out.image_error = String(e.message || e);

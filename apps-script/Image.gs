@@ -43,7 +43,14 @@ function buildMeetingImage_(meeting, items) {
   while (old.hasNext()) old.next().setTrashed(true);
 
   var file = folder.createFile(blob);
-  var out = { url: file.getUrl(), name: fileName, folder: folder.getName() };
+  var out = {
+    url: file.getUrl(),
+    name: fileName,
+    folder: folder.getName(),
+    // ส่งตัวรูปกลับไปด้วยเพื่อแสดงในหน้าเว็บทันที
+    // ลิงก์ของ Drive เป็นหน้าเว็บ ไม่ใช่ไฟล์ภาพ จึงเอาไปใส่ <img src> ตรง ๆ ไม่ได้
+    base64: Utilities.base64Encode(blob.getBytes())
+  };
 
   // เก็บกวาดสไลด์ชั่วคราว — ถ้าลบไม่สำเร็จก็ไม่ควรทำให้รูปที่สร้างเสร็จแล้วสูญไป
   // (ถ้า throw ตรงนี้ ผู้เรียกจะไม่ได้ลิงก์ ทั้งที่ไฟล์ PNG ถูกสร้างขึ้นจริงแล้ว)

@@ -88,6 +88,7 @@ function makeApi() {
           ok: true, meeting_id: 'MOM-2026-001', errors: [], warnings: [],
           dry_run: true, recipients: 2, personal: 0, quota_left: 97,
           image_url: 'https://example.com/fake.png', image_name: 'MOM-2026-001.png',
+          image_data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0CAIAAABqhmJGAAACbklEQVR4nO3doVFFARAEwZcGEoEgPFIksf3mIsBQA921AZwZfc/b17eZRff8+gVm9uMJ2Cw8AZuFJ2Cz8ARsFt4zIEvAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iA4R8H/P7xafY3tiABm90WJGCz24IEbHZbkIDNbgsSsNltQQI2uy1IwGa3BQnY7LYgAZvdFiRgs9uCBGx2W5CAzW4LErDZbUECNrstSMBmtwUJ2Oy2IAGb3RYkYLPbggRsdluQgM1uCxKw2W1BAja7LUjAZrcFCdjstiABm90WJGCz24IEbHZbkIDNbgvynRDCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCs6wVoiKWJ9pJJ6gAAAABJRU5ErkJggg==',
           line_text: '📋 สรุปประชุม: ทดสอบระบบ\\n🗓 8 ก.ย. 2026\\n\\n📌 งานที่ต้องทำ (1)\\n1. สมชาย — ทดสอบปุ่มปิดประชุม · ครบ 10 ก.ย. 2026'
         });
       });
