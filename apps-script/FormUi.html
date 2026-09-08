@@ -73,8 +73,8 @@
 <div id="confirm" class="confirm">
   <div id="confirmText"></div>
   <div style="margin-top:12px">
-    <button class="btn primary" onclick="doSend()">ยืนยัน ส่งสรุป</button>
-    <button class="btn" onclick="cancelSend()">ยกเลิก</button>
+    <button class="btn primary" onclick="confirmYes()">ยืนยัน</button>
+    <button class="btn" onclick="confirmNo()">ยกเลิก</button>
   </div>
 </div>
 
@@ -133,6 +133,10 @@
     <textarea id="rText" style="height:150px;font-family:monospace;font-size:12px"></textarea>
     <button class="btn" style="margin-top:6px" onclick="copyLine()">คัดลอกข้อความ</button>
     <span id="rCopied" style="color:#2b8a3e;font-size:12px"></span>
+  </div>
+  <div class="row" style="border-top:1px solid #b2f2bb;padding-top:12px">
+    <button class="btn primary" onclick="askNewMeeting()">เริ่มประชุมใหม่ (ล้างฟอร์ม)</button>
+    <span class="hint" style="margin-left:8px">ประชุมที่เพิ่งปิดจะยังอยู่ในชีต ไม่ถูกลบ</span>
   </div>
 </div>
 
@@ -243,13 +247,40 @@ function busy(on) {
   el('bDone').disabled = on;
 }
 
-/**
- * ปิดประชุม = บันทึก -> ตรวจ -> ให้คนยืนยันรายชื่อผู้รับ -> ส่งอีเมล + สร้างรูป
- *
- * ห้ามใช้ window.confirm() เด็ดขาด: หน้าเว็บของ Apps Script รันใน iframe แบบ sandbox
- * ที่ไม่มี allow-modals เบราว์เซอร์จะข้าม dialog แล้วคืนค่า false ทันที
- * ทำให้ดูเหมือนผู้ใช้กดยกเลิกทั้งที่ยังไม่ได้เห็นอะไรเลย จึงต้องทำแผงยืนยันในหน้าเอง
- */
+/* ---- แผงยืนยัน ----
+   ใช้ร่วมกัน 3 งาน: ส่งสรุป / สลับโหมดส่ง / เริ่มประชุมใหม่
+   เก็บสิ่งที่จะทำไว้ในตัวแปรแทนการเปลี่ยน onclick ของปุ่ม เพราะการเปลี่ยน onclick
+   ทำให้เคยเกิดบั๊กปุ่มค้างงานเก่าเมื่อผู้ใช้กดยกเลิกจากงานหนึ่งแล้วไปเปิดอีกงาน
+
+   ห้ามใช้ window.confirm(): หน้าเว็บของ Apps Script อยู่ใน iframe แบบ sandbox
+   ที่ไม่มี allow-modals เบราว์เซอร์จะข้าม dialog แล้วคืนค่า false ทันที */
+var CONFIRM_ACTION = null;
+
+function showConfirm(html, action) {
+  CONFIRM_ACTION = action;
+  el('confirmText').innerHTML = html;
+  el('confirm').style.display = 'block';
+  el('confirm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function hideConfirm() {
+  el('confirm').style.display = 'none';
+  CONFIRM_ACTION = null;
+}
+
+function confirmYes() {
+  var action = CONFIRM_ACTION;
+  hideConfirm();
+  if (action) action();
+}
+
+function confirmNo() {
+  hideConfirm();
+  setStatus('ยกเลิกแล้ว');
+}
+
+/* ---- ปิดประชุม: บันทึก -> ตรวจ -> ยืนยันรายชื่อผู้รับ -> ส่งอีเมล + สร้างรูป ---- */
+
 function finish() {
   busy(true);
   hideConfirm();
@@ -277,11 +308,7 @@ function finish() {
         h.push('<b>ข้อควรระวัง</b>');
         h.push('• ' + pv.warnings.join('<br>• '));
       }
-      el('confirmText').innerHTML = h.join('<br>');
-      // ผูกปุ่มยืนยันใหม่ทุกครั้ง เพราะแผงนี้ถูกใช้ร่วมกับการสลับโหมดส่ง
-      el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSend()');
-      el('confirm').style.display = 'block';
-      el('confirm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showConfirm(h.join('<br>'), doSend);
       setStatus('รอการยืนยัน');
     })
     .withFailureHandler(function (e) {
@@ -292,18 +319,7 @@ function finish() {
     .webPreview(collect());
 }
 
-function hideConfirm() {
-  el('confirm').style.display = 'none';
-}
-
-function cancelSend() {
-  hideConfirm();
-  el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSend()');
-  setStatus('ยกเลิกแล้ว');
-}
-
 function doSend() {
-  hideConfirm();
   busy(true);
   setStatus('กำลังส่งและสร้างรูป… อาจใช้เวลาสัก 10–20 วินาที');
   google.script.run
@@ -359,6 +375,7 @@ function showResult(r) {
   }
 
   el('rText').value = r.line_text || '';
+  el('rCopied').textContent = '';
   el('result').style.display = 'block';
   el('result').scrollIntoView({ behavior: 'smooth' });
 }
@@ -370,15 +387,44 @@ function copyLine() {
   el('rCopied').textContent = ' คัดลอกแล้ว';
 }
 
+/* ---- เริ่มประชุมใหม่ ----
+   จำเป็นเพราะในโหมดทดสอบสถานะยังเป็น draft พอเปิดฟอร์มใหม่ระบบจะดึงร่างเดิมกลับมาเสมอ
+   ถ้าไม่มีปุ่มนี้ก็จะติดอยู่กับประชุมเดิมตลอด */
+
+function askNewMeeting() {
+  var h = ['เริ่มประชุมใหม่และล้างฟอร์ม'];
+  if (MEETING_ID) {
+    h.push('ประชุม <b>' + MEETING_ID + '</b> ที่ทำอยู่ถูกบันทึกไว้ในชีตแล้ว จะไม่ถูกลบ');
+  }
+  h.push('ยืนยันหรือไม่');
+  showConfirm(h.join('<br>'), doNewMeeting);
+}
+
+function doNewMeeting() {
+  busy(true);
+  setStatus('กำลังเปิดประชุมใหม่…');
+  google.script.run
+    .withSuccessHandler(function (data) {
+      busy(false);
+      init(data);
+      show('', '');
+      window.scrollTo(0, 0);
+    })
+    .withFailureHandler(function (e) {
+      busy(false);
+      setStatus('เปิดประชุมใหม่ไม่สำเร็จ');
+      show('err', 'เกิดข้อผิดพลาด: ' + e.message);
+    })
+    .webStartNew();
+}
+
 /* ---- โหมดส่ง: แสดงและสลับจากหน้าเว็บ ----
-   ผู้ใช้ที่ใช้เฉพาะลิงก์ Web App จะไม่เห็นเมนูในชีต ถ้าไม่มีปุ่มนี้จะปิด DRY_RUN ไม่ได้เลย
-   และจะส่งอีเมลจริงไม่ได้ตลอดไป */
+   ผู้ใช้ที่ใช้เฉพาะลิงก์ Web App จะไม่เห็นเมนูในชีต ถ้าไม่มีปุ่มนี้จะปิด DRY_RUN ไม่ได้เลย */
 var CTX = null;
 
 function renderMode(ctx) {
   CTX = ctx;
   var m = el('mode');
-  var noEmail = ctx.people_with_email === 0;
   if (ctx.dry_run) {
     m.className = 'mode test';
     m.innerHTML = '🧪 โหมดทดสอบ ไม่ส่งอีเมลจริง <a onclick="askMode(false)">เปลี่ยนเป็นส่งจริง</a>';
@@ -386,7 +432,7 @@ function renderMode(ctx) {
     m.className = 'mode live';
     m.innerHTML = '📧 โหมดส่งจริง <a onclick="askMode(true)">กลับไปโหมดทดสอบ</a>';
   }
-  if (noEmail && ctx.people_total > 0) {
+  if (ctx.people_with_email === 0 && ctx.people_total > 0) {
     m.innerHTML += ' · <span title="ไปกรอกคอลัมน์ email ในชีต people">⚠ ยังไม่มีอีเมลในทะเบียนรายชื่อ</span>';
   }
 }
@@ -402,16 +448,10 @@ function askMode(toTest) {
     }
   }
   h.push('ยืนยันหรือไม่');
-  el('confirmText').innerHTML = h.join('<br>');
-  el('confirm').style.display = 'block';
-  el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSetMode(' + (toTest ? 'true' : 'false') + ')');
-  el('confirm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showConfirm(h.join('<br>'), function () { doSetMode(toTest); });
 }
 
 function doSetMode(toTest) {
-  hideConfirm();
-  // คืนปุ่มยืนยันให้กลับไปทำหน้าที่เดิม เพื่อไม่ให้การกดปิดประชุมครั้งถัดไปไปเรียกการสลับโหมด
-  el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSend()');
   setStatus('กำลังเปลี่ยนโหมด…');
   google.script.run
     .withSuccessHandler(function (ctx) {
@@ -426,6 +466,13 @@ function doSetMode(toTest) {
 }
 
 function init(data) {
+  // เรียกซ้ำได้ (ปุ่มเริ่มประชุมใหม่ใช้ฟังก์ชันนี้) จึงต้องล้างของเดิมก่อนเสมอ
+  el('rows').innerHTML = '';
+  el('result').style.display = 'none';
+  hideConfirm();
+  ['title', 'start_time', 'end_time', 'location', 'decisions', 'open_issues', 'next_meeting_at']
+    .forEach(function (k) { el(k).value = ''; });
+
   PEOPLE = data.people;
   MEETING_ID = data.meeting.meeting_id || '';
   el('mid').textContent = MEETING_ID;

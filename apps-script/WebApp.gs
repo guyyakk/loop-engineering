@@ -117,6 +117,28 @@ function webFinish(p) {
   return out;
 }
 
+/**
+ * เริ่มประชุมใหม่: สร้างแถวเปล่าในชีตแล้วคืนข้อมูลฟอร์มของประชุมนั้น
+ *
+ * ต้องสร้างแถวจริงทันที ไม่ใช่แค่ล้างฟอร์มฝั่งหน้าเว็บ เพราะถ้าฟอร์มส่ง meeting_id ว่าง
+ * ระบบจะถือว่าให้เขียนทับร่างล่าสุด ซึ่งจะไปทับประชุมที่เพิ่งปิดไป
+ */
+function webStartNew() {
+  var lock = LockService.getDocumentLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet_(SHEET.MEETINGS);
+    var headers = HEADERS[SHEET.MEETINGS];
+    var vals = { meeting_id: nextMeetingId_(), date: new Date(), status: STATUS.DRAFT };
+    sh.getRange(sh.getLastRow() + 1, 1, 1, headers.length).setValues([headers.map(function (h) {
+      return vals[h] === undefined ? '' : vals[h];
+    })]);
+    return formInit(); // ร่างล่าสุดคือแถวที่เพิ่งสร้าง
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function findMeeting_(id) {
   var m = readTable_(SHEET.MEETINGS).filter(function (x) {
     return String(x.meeting_id).trim() === String(id).trim();

@@ -62,6 +62,19 @@ function makeApi() {
       later(function () { h.s(FAKE_CTX); });
     },
 
+    webStartNew: function () {
+      CALLS.push('webStartNew');
+      later(function () {
+        h.s({
+          people: ['สมชาย', 'สุดา', 'ประเสริฐ'],
+          meeting: { meeting_id: 'MOM-2026-002', title: '', date: '2026-09-09', start_time: '', end_time: '',
+                     location: '', chair: '', note_taker: '', attendees: [], decisions: '',
+                     open_issues: '', next_meeting_at: '', sent: false },
+          items: []
+        });
+      });
+    },
+
     webPreview: function (p) {
       CALLS.push('webPreview:' + (p.items || []).length);
       later(function () {
