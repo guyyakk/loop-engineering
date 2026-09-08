@@ -40,6 +40,8 @@ function setupSheets() {
     formatHeader_(sh, expected.length);
   });
 
+  props_().setProperty('SPREADSHEET_ID', ss.getId()); // ให้ Web App หาชีตนี้เจอ
+
   if (created.indexOf(SHEET.PEOPLE) !== -1) seedPeople_();
 
   var setupError = '';
@@ -96,7 +98,7 @@ HEADER_NOTES[SHEET.MEETINGS] = {
 HEADER_NOTES[SHEET.ITEMS] = {
   item_id: 'รหัสงาน ระบบสร้างให้เอง ห้ามแก้',
   meeting_id: 'จำเป็น — เลือกจาก dropdown ว่างานนี้มาจากประชุมไหน',
-  task: 'จำเป็น — เขียนให้ชัดว่าทำอะไร ต้องยาวกว่า 10 ตัวอักษร',
+  task: 'จำเป็น — เขียนว่าต้องทำอะไร จะสั้นหรือยาวก็ได้',
   owner: 'จำเป็น — เลือกจาก dropdown และต้องเป็นคนเดียว ถ้าหลายคนให้แตกเป็นหลายแถว',
   due_date: 'จำเป็น — กำหนดเสร็จ ต้องไม่ย้อนหลังกว่าวันประชุม',
   priority: 'High / Medium / Low',

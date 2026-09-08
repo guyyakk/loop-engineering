@@ -8,7 +8,13 @@
  */
 
 function ss_() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+  // เปิดจากในชีตจะได้ตัวสเปรดชีตตรง ๆ แต่ถ้าเรียกจาก Web App บางกรณีจะได้ null
+  // จึงมี SPREADSHEET_ID ที่บันทึกไว้ตอนตั้งค่าเริ่มต้นเป็นตัวสำรอง
+  var s = SpreadsheetApp.getActiveSpreadsheet();
+  if (s) return s;
+  var id = cfg_('SPREADSHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  throw new Error('หาสเปรดชีตไม่เจอ — เปิดชีตแล้วสั่ง MOM → ตั้งค่าเริ่มต้น หนึ่งครั้งเพื่อบันทึก SPREADSHEET_ID');
 }
 
 function ui_() {
@@ -142,6 +148,7 @@ function validateMeeting_(meeting, items) {
   var errors = [];
   var warnings = [];
   var people = peopleMap_();
+  var minTask = cfgInt_('MIN_TASK_LENGTH');
 
   var required = { title: 'ชื่อการประชุม', date: 'วันที่', note_taker: 'ผู้จดบันทึก' };
   Object.keys(required).forEach(function (k) {
@@ -177,8 +184,12 @@ function validateMeeting_(meeting, items) {
     var owner = String(it.owner || '').trim();
     var due = toDate_(it.due_date);
 
-    if (task.length <= 10) {
-      errors.push(where + 'ช่อง task สั้นเกินไป ต้องเขียนให้ชัดว่าทำอะไร (ยาวกว่า 10 ตัวอักษร)');
+    // บังคับแค่ว่าต้องมีข้อความ ส่วนจะสั้นยาวแค่ไหนเป็นสิทธิ์ของคนจด
+    // ถ้าทีมไหนอยากให้เตือนเวลาเขียนสั้นเกิน ตั้ง MIN_TASK_LENGTH เป็นตัวเลขที่ต้องการ (0 = ปิด)
+    if (!task) {
+      errors.push(where + 'ยังไม่ได้เขียนว่าต้องทำอะไร (task)');
+    } else if (minTask > 0 && task.length < minTask) {
+      warnings.push(where + 'ชื่องานสั้นมาก (' + task.length + ' ตัวอักษร) คนอ่านสรุปทีหลังอาจไม่เข้าใจ');
     }
     if (!owner) {
       errors.push(where + 'ยังไม่ได้ระบุผู้รับผิดชอบ (owner)');

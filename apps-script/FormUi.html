@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8">
 <base target="_top">
 <style>
   :root { --line:#dee2e6; --muted:#868e96; --blue:#1971c2; --bg:#f8f9fa; }
@@ -38,11 +39,38 @@
   .msg.err { background:#fff5f5; border:1px solid #ffc9c9; color:#c92a2a; }
   .msg.ok  { background:#ebfbee; border:1px solid #b2f2bb; color:#2b8a3e; }
   .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  .confirm { display:none; margin:12px; padding:14px 16px; border:1px solid #ffe066;
+    background:#fff9db; border-radius:8px; font-size:13px; line-height:1.7; }
+  .confirm b { color:#212529; }
+  .result { margin:12px; padding:14px 16px; border:1px solid #b2f2bb; background:#ebfbee; border-radius:8px; display:none; }
+  .result h3 { margin:0 0 8px; font-size:14px; color:#2b8a3e; }
+  .result .row { margin:8px 0; }
+  .link { display:inline-block; background:var(--blue); color:#fff; padding:9px 16px; border-radius:6px;
+    text-decoration:none; font-weight:bold; }
+  @media (max-width: 720px) {
+    .g3, .g4 { grid-template-columns:1fr 1fr; }
+    table, thead, tbody, tr, td, th { display:block; }
+    thead { display:none; }
+    #rows tr { border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:10px; position:relative; }
+    td.n { position:absolute; right:34px; top:6px; padding:0; }
+    td.x { position:absolute; right:6px; top:2px; }
+    td { padding:3px 0; }
+    .bar { flex-wrap:wrap; }
+    .bar .sp { flex-basis:100%; margin-bottom:6px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="msg" class="msg"></div>
+
+<div id="confirm" class="confirm">
+  <div id="confirmText"></div>
+  <div style="margin-top:12px">
+    <button class="btn primary" onclick="doSend()">ยืนยัน ส่งสรุป</button>
+    <button class="btn" onclick="cancelSend()">ยกเลิก</button>
+  </div>
+</div>
 
 <div class="card">
   <h2>ข้อมูลประชุม <small id="mid"></small></h2>
@@ -90,10 +118,22 @@
   </div>
 </div>
 
+<div class="result" id="result">
+  <h3>ปิดประชุมเรียบร้อย</h3>
+  <div class="row" id="rEmail"></div>
+  <div class="row" id="rImage"></div>
+  <div class="row">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:4px">ข้อความสำหรับวางในกลุ่ม LINE</div>
+    <textarea id="rText" style="height:150px;font-family:monospace;font-size:12px"></textarea>
+    <button class="btn" style="margin-top:6px" onclick="copyLine()">คัดลอกข้อความ</button>
+    <span id="rCopied" style="color:#2b8a3e;font-size:12px"></span>
+  </div>
+</div>
+
 <div class="bar">
   <span class="sp" id="status">กำลังโหลด…</span>
   <button class="btn" id="bSave" onclick="save(false)">บันทึกร่าง</button>
-  <button class="btn primary" id="bCheck" onclick="save(true)">บันทึกแล้วตรวจ</button>
+  <button class="btn primary" id="bDone" onclick="finish()">ปิดประชุม &amp; ส่งสรุป</button>
 </div>
 
 <script>
@@ -167,7 +207,8 @@ function collect() {
     var task = r.querySelector('.task').value.trim();
     var owner = r.querySelector('.owner').value;
     var due = r.querySelector('.due').value;
-    if (!task && !owner && !due) continue; // ข้ามแถวที่ยังว่างทั้งแถว
+    // ข้ามแถวที่ยังไม่ได้กรอกอะไรเลย — วันที่ไม่นับ เพราะระบบเติมให้อัตโนมัติทุกแถวใหม่
+    if (!task && !owner) continue;
     items.push({ task: task, owner: owner, due_date: due, priority: r.querySelector('.pri').value });
   }
 
@@ -190,34 +231,115 @@ function collect() {
 
 function busy(on) {
   el('bSave').disabled = on;
-  el('bCheck').disabled = on;
+  el('bDone').disabled = on;
 }
 
-function save(check) {
+/**
+ * ปิดประชุม = บันทึก -> ตรวจ -> ให้คนยืนยันรายชื่อผู้รับ -> ส่งอีเมล + สร้างรูป
+ *
+ * ห้ามใช้ window.confirm() เด็ดขาด: หน้าเว็บของ Apps Script รันใน iframe แบบ sandbox
+ * ที่ไม่มี allow-modals เบราว์เซอร์จะข้าม dialog แล้วคืนค่า false ทันที
+ * ทำให้ดูเหมือนผู้ใช้กดยกเลิกทั้งที่ยังไม่ได้เห็นอะไรเลย จึงต้องทำแผงยืนยันในหน้าเอง
+ */
+function finish() {
   busy(true);
-  setStatus('กำลังบันทึก…');
+  hideConfirm();
+  setStatus('กำลังตรวจข้อมูล…');
   google.script.run
-    .withSuccessHandler(function (res) {
+    .withSuccessHandler(function (pv) {
       busy(false);
-      MEETING_ID = res.meeting_id;
-      el('mid').textContent = res.meeting_id;
-      DIRTY = false;
-      setStatus('บันทึกล่าสุด ' + res.saved_at);
-      if (!check) { show('ok', 'บันทึกแล้ว ' + res.item_count + ' งาน'); return; }
-      if (res.errors.length) {
-        show('err', 'ยังส่งไม่ได้ ต้องแก้ก่อน\n\n• ' + res.errors.join('\n• '));
-      } else {
-        var t = 'ข้อมูลครบแล้ว พร้อมส่ง\n\nปิดฟอร์มนี้ แล้วสั่งเมนู MOM → 📧 ส่งอีเมลสรุป';
-        if (res.warnings.length) t += '\n\nข้อควรระวัง\n• ' + res.warnings.join('\n• ');
-        show('ok', t);
+      if (pv.errors.length) {
+        setStatus('ยังส่งไม่ได้');
+        show('err', 'ยังปิดประชุมไม่ได้ ต้องแก้ก่อน\n\n• ' + pv.errors.join('\n• '));
+        return;
       }
+      show('', '');
+      var h = [];
+      h.push(pv.dry_run
+        ? '🧪 <b>โหมดทดสอบ</b> จะยังไม่มีอีเมลออกจริง'
+        : '📧 <b>โหมดส่งจริง</b> อีเมลจะถูกส่งทันทีที่กดยืนยัน');
+      h.push('งานทั้งหมด <b>' + pv.item_count + '</b> รายการ');
+      h.push('ผู้รับ <b>' + pv.to.length + '</b> คน: ' + (pv.to.join(', ') || '(ไม่มี)'));
+      if (pv.cc.length) h.push('สำเนา: ' + pv.cc.join(', '));
+      if (pv.already_sent) {
+        h.push('ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + pv.sent_at + ' จะไม่ส่งซ้ำ แต่จะสร้างรูปใหม่ให้');
+      }
+      if (pv.warnings.length) {
+        h.push('<b>ข้อควรระวัง</b>');
+        h.push('• ' + pv.warnings.join('<br>• '));
+      }
+      el('confirmText').innerHTML = h.join('<br>');
+      el('confirm').style.display = 'block';
+      el('confirm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setStatus('รอการยืนยัน');
     })
     .withFailureHandler(function (e) {
       busy(false);
-      setStatus('บันทึกไม่สำเร็จ');
+      setStatus('ตรวจไม่สำเร็จ');
       show('err', 'เกิดข้อผิดพลาด: ' + e.message);
     })
-    .formSave(collect(), check);
+    .webPreview(collect());
+}
+
+function hideConfirm() {
+  el('confirm').style.display = 'none';
+}
+
+function cancelSend() {
+  hideConfirm();
+  setStatus('ยกเลิกแล้ว ยังไม่ได้ส่ง');
+}
+
+function doSend() {
+  hideConfirm();
+  busy(true);
+  setStatus('กำลังส่งและสร้างรูป… อาจใช้เวลาสัก 10–20 วินาที');
+  google.script.run
+    .withSuccessHandler(showResult)
+    .withFailureHandler(function (e) {
+      busy(false);
+      setStatus('ไม่สำเร็จ');
+      show('err', 'เกิดข้อผิดพลาด: ' + e.message);
+    })
+    .webFinish(collect());
+}
+
+function showResult(r) {
+  busy(false);
+  DIRTY = false;
+  if (!r.ok) {
+    setStatus('ยังส่งไม่ได้');
+    show('err', 'ยังปิดประชุมไม่ได้\n\n• ' + r.errors.join('\n• '));
+    return;
+  }
+  MEETING_ID = r.meeting_id;
+  el('mid').textContent = r.meeting_id;
+  show('', '');
+  setStatus('ปิดประชุมแล้ว ' + r.meeting_id);
+
+  el('rEmail').innerHTML = r.already_sent
+    ? '📧 ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + r.sent_at + ' ระบบไม่ส่งซ้ำ'
+    : (r.dry_run
+        ? '🧪 <b>โหมดทดสอบ</b> ไม่มีอีเมลออกจริง (ผู้รับที่จะได้รับ ' + r.recipients + ' คน)'
+        : '📧 ส่งอีเมลแล้ว ' + r.recipients + ' คน' +
+          (r.personal ? ' และเมลรายบุคคลอีก ' + r.personal + ' ฉบับ' : '') +
+          ' · โควตาคงเหลือวันนี้ ' + r.quota_left);
+
+  el('rImage').innerHTML = r.image_url
+    ? '🖼 <a class="link" href="' + r.image_url + '" target="_blank" rel="noopener">เปิดรูปเพื่อเซฟไปวางใน LINE</a>' +
+      ' <span style="font-size:12px;color:#868e96">' + (r.image_name || '') + '</span>'
+    : '⚠ สร้างรูปไม่สำเร็จ: ' + (r.image_error || 'ไม่ทราบสาเหตุ') + ' — ใช้ข้อความข้างล่างแทนได้';
+
+  el('rText').value = r.line_text || '';
+  el('result').style.display = 'block';
+  el('result').scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyLine() {
+  var t = el('rText');
+  t.select();
+  document.execCommand('copy');
+  el('rCopied').textContent = ' คัดลอกแล้ว';
 }
 
 function init(data) {

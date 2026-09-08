@@ -122,9 +122,10 @@ function formSave(p, check) {
       var meeting = readTable_(SHEET.MEETINGS).filter(function (m) {
         return String(m.meeting_id).trim() === res.id;
       })[0];
-      var v = validateMeeting_(meeting, getItems_(res.id));
-      out.errors = v.errors.map(stripRowPrefix_);
-      out.warnings = v.warnings.map(stripRowPrefix_);
+      var saved = getItems_(res.id);
+      var v = validateMeeting_(meeting, saved);
+      out.errors = formatIssues_(v.errors, saved);
+      out.warnings = formatIssues_(v.warnings, saved);
     }
     return out;
   } finally {
@@ -132,11 +133,35 @@ function formSave(p, check) {
   }
 }
 
-/** ในฟอร์มไม่ต้องอ้างเลขแถวของชีต เพราะผู้ใช้ไม่ได้มองชีตอยู่ */
+/**
+ * แปลงข้อความตรวจสอบให้อ่านรู้เรื่องในฟอร์ม
+ *  - เปลี่ยน "action_items แถว 7" (เลขแถวในชีต) เป็น "งานแถวที่ 2" (ลำดับที่เห็นในฟอร์ม)
+ *  - ตัดข้อความซ้ำออก เพราะถ้าผิดแบบเดียวกันหลายแถว การขึ้นซ้ำ ๆ ไม่ได้ช่วยอะไร
+ */
+function formatIssues_(msgs, items) {
+  var pos = {};
+  items.forEach(function (it, i) { pos[it._row] = i + 1; });
+
+  var seen = {};
+  var out = [];
+  msgs.forEach(function (m) {
+    var t = String(m)
+      .replace(/^action_items แถว (\d+): /, function (all, r) {
+        var n = pos[Number(r)];
+        return n ? 'งานแถวที่ ' + n + ': ' : 'งานในรายการ: ';
+      })
+      .replace(/^meetings แถว \d+: /, '');
+    if (!seen[t]) {
+      seen[t] = true;
+      out.push(t);
+    }
+  });
+  return out;
+}
+
+/** เก็บไว้เผื่อโค้ดเดิมเรียกใช้ */
 function stripRowPrefix_(msg) {
-  return String(msg)
-    .replace(/^action_items แถว \d+: /, 'งานในรายการ: ')
-    .replace(/^meetings แถว \d+: /, '');
+  return formatIssues_([msg], [])[0];
 }
 
 function nextMeetingId_() {

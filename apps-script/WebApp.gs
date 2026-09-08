@@ -1,0 +1,90 @@
+/**
+ * WebApp.gs — เปิดฟอร์มจดประชุมเป็นลิงก์เดียว ไม่ต้องเปิดชีตและไม่ต้องหาเมนู
+ *
+ * ฟังก์ชันในไฟล์นี้ห้ามเรียก ui_() เด็ดขาด เพราะ SpreadsheetApp.getUi()
+ * ใช้ได้เฉพาะตอนเปิดจากในชีต ถ้าเรียกจาก Web App จะพังทันที
+ * ทุกอย่างที่ต้องคุยกับผู้ใช้จึงส่งเป็นข้อมูลกลับไปให้หน้าเว็บแสดงเอง
+ */
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('FormUi')
+    .setTitle('จดประชุม MOM')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** ใช้ในหน้าเว็บเพื่อรู้ว่ากำลังรันแบบไหน จะได้ซ่อน/แสดงปุ่มให้ถูก */
+function webContext() {
+  return { dryRun: cfgBool_('DRY_RUN') };
+}
+
+/**
+ * ขั้นที่ 1 ของการปิดประชุม: บันทึก + ตรวจ + บอกว่าจะส่งถึงใครบ้าง
+ * ยังไม่ส่งอะไรออกไป เพื่อให้คนได้เห็นรายชื่อผู้รับก่อนกดยืนยัน (human gate)
+ */
+function webPreview(p) {
+  var saved = formSave(p, true);
+  var meeting = findMeeting_(saved.meeting_id);
+  var r = recipientsOf_(meeting);
+  return {
+    meeting_id: saved.meeting_id,
+    errors: saved.errors,
+    warnings: saved.warnings,
+    dry_run: cfgBool_('DRY_RUN'),
+    already_sent: String(meeting.status || '').toLowerCase() === STATUS.SENT,
+    sent_at: fmtDateTime_(meeting.sent_at),
+    to: r.to,
+    cc: r.cc,
+    send_individual: cfgBool_('SEND_INDIVIDUAL'),
+    item_count: getItems_(saved.meeting_id).length
+  };
+}
+
+/**
+ * ขั้นที่ 2: ส่งจริง (ตามโหมด DRY_RUN) แล้วสร้างรูปกับข้อความสำหรับ LINE
+ * ถ้าประชุมนี้ส่งอีเมลไปแล้ว จะข้ามการส่งแต่ยังสร้างรูปใหม่ให้
+ */
+function webFinish(p) {
+  var saved = formSave(p, true);
+  if (saved.errors.length) return { ok: false, errors: saved.errors };
+
+  var id = saved.meeting_id;
+  var meeting = findMeeting_(id);
+  var items = getItems_(id);
+  var out = { ok: true, meeting_id: id, errors: [], warnings: saved.warnings };
+
+  if (String(meeting.status || '').toLowerCase() === STATUS.SENT) {
+    out.already_sent = true;
+    out.sent_at = fmtDateTime_(meeting.sent_at);
+  } else {
+    var res = sendSummaryEmails_(meeting, items);
+    out.dry_run = res.dryRun;
+    out.recipients = res.to.length;
+    out.personal = res.personalCount;
+    out.quota_left = res.quotaLeft;
+    if (!res.dryRun) {
+      setCell_(SHEET.MEETINGS, meeting._row, 'status', STATUS.SENT);
+      setCell_(SHEET.MEETINGS, meeting._row, 'sent_at', new Date());
+    }
+  }
+
+  try {
+    var img = buildMeetingImage_(meeting, items);
+    setCell_(SHEET.MEETINGS, meeting._row, 'image_url', img.url);
+    out.image_url = img.url;
+    out.image_name = img.name;
+  } catch (e) {
+    // รูปพังไม่ควรทำให้ทั้งขั้นตอนล้ม เพราะอีเมลส่งไปแล้ว
+    out.image_error = String(e.message || e);
+  }
+
+  out.line_text = buildLineText_(meeting, items);
+  return out;
+}
+
+function findMeeting_(id) {
+  var m = readTable_(SHEET.MEETINGS).filter(function (x) {
+    return String(x.meeting_id).trim() === String(id).trim();
+  })[0];
+  if (!m) throw new Error('ไม่พบการประชุมรหัส ' + id + ' ในชีต');
+  return m;
+}
