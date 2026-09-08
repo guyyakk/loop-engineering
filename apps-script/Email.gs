@@ -8,7 +8,15 @@
 function sendSummaryEmails_(meeting, items) {
   var r = recipientsOf_(meeting);
   if (!r.to.length) {
-    throw new Error('ไม่มีผู้รับอีเมลเลย — ตรวจว่าชื่อใน attendees ตรงกับชีต people และมีอีเมลครบ');
+    // ไม่ใช่ข้อผิดพลาดของระบบ แต่เป็นข้อมูลที่ยังไม่ครบ จึงคืนผลว่า "ข้าม" แทนการ throw
+    // ถ้า throw ตรงนี้ ขั้นตอนที่ตามมา (สร้างรูปสำหรับ LINE) จะไม่ได้ทำงานเลย ทั้งที่ไม่เกี่ยวกับอีเมล
+    return {
+      skipped: 'no_recipients',
+      dryRun: cfgBool_('DRY_RUN'),
+      to: [], cc: r.cc, subject: subjectOf_(meeting, items),
+      personalCount: 0, sentCount: 0,
+      quotaLeft: MailApp.getRemainingDailyQuota()
+    };
   }
 
   var subject = subjectOf_(meeting, items);

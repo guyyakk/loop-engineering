@@ -181,11 +181,21 @@ function nextMeetingId_() {
 function upsertMeeting_(p) {
   var sh = sheet_(SHEET.MEETINGS);
   var headers = HEADERS[SHEET.MEETINGS];
+  var rows = readTable_(SHEET.MEETINGS);
   var target = null;
   if (p.meeting_id) {
-    target = readTable_(SHEET.MEETINGS).filter(function (m) {
+    target = rows.filter(function (m) {
       return String(m.meeting_id).trim() === String(p.meeting_id).trim();
     })[0] || null;
+  }
+  if (!target) {
+    // ฟอร์มไม่ได้ส่งรหัสประชุมมา (เช่น ผู้ใช้รีเฟรชหน้า หรือเปิดสองแท็บ)
+    // ให้เขียนทับร่างล่าสุดแทนการสร้างแถวใหม่ ซึ่งจะได้ประชุมซ้ำและทำให้ image_url/สถานะเดิมหลุดหาย
+    // เกณฑ์นี้ตรงกับที่ formInit ใช้เลือกร่างมาแสดง จึงเป็นการประชุมเดียวกับที่ผู้ใช้เห็นอยู่
+    var drafts = rows.filter(function (m) {
+      return String(m.status || '').toLowerCase() !== STATUS.SENT;
+    });
+    target = drafts.length ? drafts[drafts.length - 1] : null;
   }
   var base = target || {};
   var id = target ? String(target.meeting_id) : (p.meeting_id || nextMeetingId_());

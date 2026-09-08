@@ -43,9 +43,17 @@ function buildMeetingImage_(meeting, items) {
   while (old.hasNext()) old.next().setTrashed(true);
 
   var file = folder.createFile(blob);
-  DriveApp.getFileById(presId).setTrashed(true); // เก็บกวาดสไลด์ชั่วคราว
+  var out = { url: file.getUrl(), name: fileName, folder: folder.getName() };
 
-  return { url: file.getUrl(), name: fileName, folder: folder.getName() };
+  // เก็บกวาดสไลด์ชั่วคราว — ถ้าลบไม่สำเร็จก็ไม่ควรทำให้รูปที่สร้างเสร็จแล้วสูญไป
+  // (ถ้า throw ตรงนี้ ผู้เรียกจะไม่ได้ลิงก์ ทั้งที่ไฟล์ PNG ถูกสร้างขึ้นจริงแล้ว)
+  try {
+    DriveApp.getFileById(presId).setTrashed(true);
+  } catch (e) {
+    Logger.log('ลบสไลด์ชั่วคราวไม่สำเร็จ (%s): %s', presId, e.message);
+  }
+
+  return out;
 }
 
 /** โฟลเดอร์เก็บรูป: ใช้ค่าใน config ถ้ามี ถ้าไม่มีก็สร้าง "MOM images" แล้วจำ id ไว้ */

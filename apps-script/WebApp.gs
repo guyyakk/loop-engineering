@@ -12,9 +12,34 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-/** ใช้ในหน้าเว็บเพื่อรู้ว่ากำลังรันแบบไหน จะได้ซ่อน/แสดงปุ่มให้ถูก */
+/**
+ * สถานะที่หน้าเว็บต้องรู้ — โหมดส่ง และจำนวนคนที่มีอีเมลจริง
+ * (ผู้ใช้ที่ใช้เฉพาะ Web App จะไม่เห็นเมนูในชีต จึงต้องเห็นข้อมูลพวกนี้ในหน้าเว็บ)
+ */
 function webContext() {
-  return { dryRun: cfgBool_('DRY_RUN') };
+  var map = peopleMap_();
+  var total = 0, withEmail = 0;
+  Object.keys(map).forEach(function (n) {
+    if (!map[n].active) return;
+    total++;
+    if (map[n].email) withEmail++;
+  });
+  return {
+    dry_run: cfgBool_('DRY_RUN'),
+    send_individual: cfgBool_('SEND_INDIVIDUAL'),
+    people_total: total,
+    people_with_email: withEmail
+  };
+}
+
+/**
+ * สลับโหมดทดสอบ/ส่งจริงจากหน้าเว็บ
+ * เป็นการกระทำที่มีผลจริง (ปิดแล้วอีเมลจะออกทันทีที่กดปิดประชุม)
+ * จึงให้หน้าเว็บถามยืนยันก่อนเรียกฟังก์ชันนี้เสมอ
+ */
+function webSetDryRun(next) {
+  props_().setProperty('DRY_RUN', next ? 'true' : 'false');
+  return webContext();
 }
 
 /**
@@ -25,10 +50,14 @@ function webPreview(p) {
   var saved = formSave(p, true);
   var meeting = findMeeting_(saved.meeting_id);
   var r = recipientsOf_(meeting);
+  var warnings = saved.warnings.slice();
+  if (!r.to.length) {
+    warnings.push('ไม่มีผู้รับอีเมลเลย จะข้ามการส่งอีเมลและสร้างเฉพาะรูปกับข้อความสำหรับ LINE — ถ้าต้องการให้ส่งเมล ให้กรอกคอลัมน์ email ในชีต people');
+  }
   return {
     meeting_id: saved.meeting_id,
     errors: saved.errors,
-    warnings: saved.warnings,
+    warnings: warnings,
     dry_run: cfgBool_('DRY_RUN'),
     already_sent: String(meeting.status || '').toLowerCase() === STATUS.SENT,
     sent_at: fmtDateTime_(meeting.sent_at),
@@ -56,14 +85,20 @@ function webFinish(p) {
     out.already_sent = true;
     out.sent_at = fmtDateTime_(meeting.sent_at);
   } else {
-    var res = sendSummaryEmails_(meeting, items);
-    out.dry_run = res.dryRun;
-    out.recipients = res.to.length;
-    out.personal = res.personalCount;
-    out.quota_left = res.quotaLeft;
-    if (!res.dryRun) {
-      setCell_(SHEET.MEETINGS, meeting._row, 'status', STATUS.SENT);
-      setCell_(SHEET.MEETINGS, meeting._row, 'sent_at', new Date());
+    // อีเมลกับรูปเป็นอิสระต่อกัน ถ้าเมลมีปัญหาก็ยังต้องได้รูปกับข้อความสำหรับ LINE
+    try {
+      var res = sendSummaryEmails_(meeting, items);
+      out.dry_run = res.dryRun;
+      out.recipients = res.to.length;
+      out.personal = res.personalCount;
+      out.quota_left = res.quotaLeft;
+      out.email_skipped = res.skipped || '';
+      if (!res.dryRun && !res.skipped) {
+        setCell_(SHEET.MEETINGS, meeting._row, 'status', STATUS.SENT);
+        setCell_(SHEET.MEETINGS, meeting._row, 'sent_at', new Date());
+      }
+    } catch (e) {
+      out.email_error = String(e.message || e);
     }
   }
 

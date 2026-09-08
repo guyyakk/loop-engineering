@@ -42,6 +42,10 @@
   .confirm { display:none; margin:12px; padding:14px 16px; border:1px solid #ffe066;
     background:#fff9db; border-radius:8px; font-size:13px; line-height:1.7; }
   .confirm b { color:#212529; }
+  .mode { margin-left:10px; padding:3px 9px; border-radius:12px; font-size:12px; white-space:nowrap; }
+  .mode.test { background:#fff9db; border:1px solid #ffe066; color:#856404; }
+  .mode.live { background:#fff5f5; border:1px solid #ffc9c9; color:#c92a2a; font-weight:bold; }
+  .mode a { margin-left:6px; cursor:pointer; text-decoration:underline; }
   .result { margin:12px; padding:14px 16px; border:1px solid #b2f2bb; background:#ebfbee; border-radius:8px; display:none; }
   .result h3 { margin:0 0 8px; font-size:14px; color:#2b8a3e; }
   .result .row { margin:8px 0; }
@@ -131,7 +135,10 @@
 </div>
 
 <div class="bar">
-  <span class="sp" id="status">กำลังโหลด…</span>
+  <span class="sp">
+    <span id="status">กำลังโหลด…</span>
+    <span id="mode" class="mode"></span>
+  </span>
   <button class="btn" id="bSave" onclick="save(false)">บันทึกร่าง</button>
   <button class="btn primary" id="bDone" onclick="finish()">ปิดประชุม &amp; ส่งสรุป</button>
 </div>
@@ -269,6 +276,8 @@ function finish() {
         h.push('• ' + pv.warnings.join('<br>• '));
       }
       el('confirmText').innerHTML = h.join('<br>');
+      // ผูกปุ่มยืนยันใหม่ทุกครั้ง เพราะแผงนี้ถูกใช้ร่วมกับการสลับโหมดส่ง
+      el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSend()');
       el('confirm').style.display = 'block';
       el('confirm').scrollIntoView({ behavior: 'smooth', block: 'center' });
       setStatus('รอการยืนยัน');
@@ -287,7 +296,8 @@ function hideConfirm() {
 
 function cancelSend() {
   hideConfirm();
-  setStatus('ยกเลิกแล้ว ยังไม่ได้ส่ง');
+  el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSend()');
+  setStatus('ยกเลิกแล้ว');
 }
 
 function doSend() {
@@ -317,13 +327,21 @@ function showResult(r) {
   show('', '');
   setStatus('ปิดประชุมแล้ว ' + r.meeting_id);
 
-  el('rEmail').innerHTML = r.already_sent
-    ? '📧 ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + r.sent_at + ' ระบบไม่ส่งซ้ำ'
-    : (r.dry_run
-        ? '🧪 <b>โหมดทดสอบ</b> ไม่มีอีเมลออกจริง (ผู้รับที่จะได้รับ ' + r.recipients + ' คน)'
-        : '📧 ส่งอีเมลแล้ว ' + r.recipients + ' คน' +
-          (r.personal ? ' และเมลรายบุคคลอีก ' + r.personal + ' ฉบับ' : '') +
-          ' · โควตาคงเหลือวันนี้ ' + r.quota_left);
+  var email;
+  if (r.already_sent) {
+    email = '📧 ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + r.sent_at + ' ระบบไม่ส่งซ้ำ';
+  } else if (r.email_error) {
+    email = '⚠ ส่งอีเมลไม่สำเร็จ: ' + r.email_error + ' (รูปและข้อความด้านล่างยังใช้ได้ตามปกติ)';
+  } else if (r.email_skipped === 'no_recipients') {
+    email = '⚠ <b>ข้ามการส่งอีเมล</b> เพราะยังไม่มีผู้รับ — ไปกรอกคอลัมน์ email ในชีต people ก่อน';
+  } else if (r.dry_run) {
+    email = '🧪 <b>โหมดทดสอบ</b> ไม่มีอีเมลออกจริง (ผู้รับที่จะได้รับ ' + r.recipients + ' คน)';
+  } else {
+    email = '📧 ส่งอีเมลแล้ว ' + r.recipients + ' คน' +
+      (r.personal ? ' และเมลรายบุคคลอีก ' + r.personal + ' ฉบับ' : '') +
+      ' · โควตาคงเหลือวันนี้ ' + r.quota_left;
+  }
+  el('rEmail').innerHTML = email;
 
   el('rImage').innerHTML = r.image_url
     ? '🖼 <a class="link" href="' + r.image_url + '" target="_blank" rel="noopener">เปิดรูปเพื่อเซฟไปวางใน LINE</a>' +
@@ -340,6 +358,61 @@ function copyLine() {
   t.select();
   document.execCommand('copy');
   el('rCopied').textContent = ' คัดลอกแล้ว';
+}
+
+/* ---- โหมดส่ง: แสดงและสลับจากหน้าเว็บ ----
+   ผู้ใช้ที่ใช้เฉพาะลิงก์ Web App จะไม่เห็นเมนูในชีต ถ้าไม่มีปุ่มนี้จะปิด DRY_RUN ไม่ได้เลย
+   และจะส่งอีเมลจริงไม่ได้ตลอดไป */
+var CTX = null;
+
+function renderMode(ctx) {
+  CTX = ctx;
+  var m = el('mode');
+  var noEmail = ctx.people_with_email === 0;
+  if (ctx.dry_run) {
+    m.className = 'mode test';
+    m.innerHTML = '🧪 โหมดทดสอบ ไม่ส่งอีเมลจริง <a onclick="askMode(false)">เปลี่ยนเป็นส่งจริง</a>';
+  } else {
+    m.className = 'mode live';
+    m.innerHTML = '📧 โหมดส่งจริง <a onclick="askMode(true)">กลับไปโหมดทดสอบ</a>';
+  }
+  if (noEmail && ctx.people_total > 0) {
+    m.innerHTML += ' · <span title="ไปกรอกคอลัมน์ email ในชีต people">⚠ ยังไม่มีอีเมลในทะเบียนรายชื่อ</span>';
+  }
+}
+
+function askMode(toTest) {
+  var h = [];
+  if (toTest) {
+    h.push('เปลี่ยนกลับเป็น <b>โหมดทดสอบ</b> — กดปิดประชุมแล้วจะไม่มีอีเมลออกจริง');
+  } else {
+    h.push('เปลี่ยนเป็น <b>โหมดส่งจริง</b> — ครั้งต่อไปที่กดปิดประชุมและกดยืนยัน อีเมลจะถูกส่งออกจริงทันที');
+    if (CTX && CTX.people_with_email === 0) {
+      h.push('⚠ ตอนนี้ยังไม่มีใครในชีต people ที่มีอีเมล ระบบจะข้ามการส่งเมลอยู่ดี');
+    }
+  }
+  h.push('ยืนยันหรือไม่');
+  el('confirmText').innerHTML = h.join('<br>');
+  el('confirm').style.display = 'block';
+  el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSetMode(' + (toTest ? 'true' : 'false') + ')');
+  el('confirm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function doSetMode(toTest) {
+  hideConfirm();
+  // คืนปุ่มยืนยันให้กลับไปทำหน้าที่เดิม เพื่อไม่ให้การกดปิดประชุมครั้งถัดไปไปเรียกการสลับโหมด
+  el('confirm').querySelector('.btn.primary').setAttribute('onclick', 'doSend()');
+  setStatus('กำลังเปลี่ยนโหมด…');
+  google.script.run
+    .withSuccessHandler(function (ctx) {
+      renderMode(ctx);
+      setStatus(ctx.dry_run ? 'อยู่ในโหมดทดสอบ' : 'อยู่ในโหมดส่งจริง');
+    })
+    .withFailureHandler(function (e) {
+      setStatus('เปลี่ยนโหมดไม่สำเร็จ');
+      show('err', 'เกิดข้อผิดพลาด: ' + e.message);
+    })
+    .webSetDryRun(toTest);
 }
 
 function init(data) {
@@ -374,6 +447,10 @@ function init(data) {
 google.script.run.withSuccessHandler(init)
   .withFailureHandler(function (e) { show('err', 'โหลดข้อมูลไม่สำเร็จ: ' + e.message); })
   .formInit();
+
+google.script.run.withSuccessHandler(renderMode)
+  .withFailureHandler(function () { el('mode').textContent = ''; })
+  .webContext();
 
 window.addEventListener('beforeunload', function (e) {
   if (DIRTY) { e.preventDefault(); e.returnValue = ''; }

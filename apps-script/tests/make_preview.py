@@ -18,7 +18,12 @@ STUB = """
 <script>
 // ---- stub ของ google.script.run สำหรับทดสอบ UI เท่านั้น ----
 var CALLS = [];
-var google = { script: { run: (function () {
+var FAKE_CTX = { dry_run: true, send_individual: false, people_total: 3, people_with_email: 0 };
+// google.script.run ของจริงคืนอ็อบเจ็กต์ใหม่ทุกครั้งที่เข้าถึง ทำให้เรียกหลายคำสั่งพร้อมกันได้
+// สตับจึงต้องใช้ getter ไม่งั้น handler ของคำสั่งที่เรียกทีหลังจะไปทับของคำสั่งแรก
+var google = { script: { get run() { return makeApi(); } } };
+
+function makeApi() {
   var h = {};
   function later(fn) { setTimeout(fn, 60); }
   var api = {
@@ -44,6 +49,17 @@ var google = { script: { run: (function () {
         h.s({ meeting_id: 'MOM-2026-001', saved_at: '10:12:33',
               item_count: (p.items || []).length, errors: [], warnings: [] });
       });
+    },
+
+    webContext: function () {
+      CALLS.push('webContext');
+      later(function () { h.s(FAKE_CTX); });
+    },
+
+    webSetDryRun: function (next) {
+      CALLS.push('webSetDryRun:' + next);
+      FAKE_CTX.dry_run = !!next;
+      later(function () { h.s(FAKE_CTX); });
     },
 
     webPreview: function (p) {
@@ -78,7 +94,7 @@ var google = { script: { run: (function () {
     }
   };
   return api;
-})() } };
+}
 </script>
 """
 
