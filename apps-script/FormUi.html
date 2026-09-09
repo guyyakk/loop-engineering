@@ -18,7 +18,13 @@
   .grid { display:grid; gap:10px; }
   .g3 { grid-template-columns:2fr 1fr 1fr; }
   .g4 { grid-template-columns:1fr 1fr 1fr 1fr; }
-  .people { display:flex; flex-wrap:wrap; gap:6px; }
+  .people { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; }
+  .dept { border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin-bottom:8px; background:#fff; }
+  .dept summary { cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px; }
+  .dept summary .muted { color:var(--muted); font-weight:normal; }
+  .dept .pick { margin-left:auto; font-size:12px; color:var(--muted); }
+  .dept .pick.has { color:var(--blue); font-weight:bold; }
+  .alldept { font-size:12px; color:var(--blue); cursor:pointer; text-decoration:underline; margin-left:4px; }
   .chip { border:1px solid var(--line); border-radius:16px; padding:5px 12px; cursor:pointer; background:#fff; user-select:none; }
   .chip.on { background:#e7f5ff; border-color:var(--blue); color:var(--blue); font-weight:bold; }
   table { width:100%; border-collapse:collapse; }
@@ -26,6 +32,7 @@
   td { padding:3px 4px; vertical-align:top; }
   td.n { width:26px; color:var(--muted); text-align:right; padding-top:11px; font-size:12px; }
   td.x { width:30px; }
+  #rows .note { margin-top:4px; font-size:12px; color:#5c6670; background:#fbfbfc; }
   .del { border:0; background:none; color:#c92a2a; cursor:pointer; font-size:16px; padding:6px 4px; }
   button { font-family:inherit; font-size:14px; }
   .add { border:1px dashed var(--line); background:#fff; border-radius:6px; padding:8px 14px; cursor:pointer; color:var(--blue); margin-top:8px; }
@@ -96,19 +103,25 @@
 </div>
 
 <div class="card">
-  <h2>ผู้เข้าร่วม <small>กดชื่อเพื่อเลือก/ยกเลิก</small></h2>
-  <div id="people" class="people"></div>
-  <div class="hint">ชื่อมาจากชีต people — ถ้าใครยังไม่มี ให้ไปเพิ่มในชีตนั้นก่อนแล้วเปิดฟอร์มใหม่</div>
+  <h2>ผู้เข้าร่วม <small id="peopleTotal">ยังไม่ได้เลือกใคร</small></h2>
+  <div id="people"></div>
+  <div class="hint">แยกตามแผนกจากคอลัมน์ department ในชีต people · กดหัวแผนกเพื่อพับ/กาง · กดชื่อเพื่อเลือก</div>
+</div>
+
+<div class="card">
+  <h2>วาระการประชุม <small>บรรทัดละ 1 วาระ</small></h2>
+  <textarea id="agenda" placeholder="ทบทวนงานค้างจากครั้งก่อน&#10;ผลตรวจ OOS batch 2609&#10;แผนสอบเทียบเครื่องมือไตรมาสหน้า"></textarea>
 </div>
 
 <div class="card">
   <h2>สิ่งที่ต้องทำ <small>หนึ่งบรรทัด = หนึ่งงาน = หนึ่งคน</small></h2>
   <table>
-    <thead><tr><th></th><th>ทำอะไร *</th><th>ใคร *</th><th>เสร็จเมื่อไหร่ *</th><th>ความสำคัญ</th><th></th></tr></thead>
+    <thead><tr><th></th><th>ทำอะไร * (และต้องใช้อะไร)</th><th>ใคร *</th><th>เสร็จเมื่อไหร่ *</th><th>ความสำคัญ</th><th></th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
   <button class="add" onclick="addRow()">+ เพิ่มงาน</button>
-  <div class="hint">แถวใหม่จะใช้กำหนดเสร็จเดิมของแถวก่อนหน้าให้อัตโนมัติ แก้ทีหลังได้</div>
+  <div class="hint">แถวใหม่จะใช้กำหนดเสร็จเดิมของแถวก่อนหน้าให้อัตโนมัติ แก้ทีหลังได้ ·
+    ช่องที่สองใช้บอกว่างานนั้นต้องใช้อะไรหรือรออะไรอยู่ จะถูกใส่ลงในรูปสรุปด้วย</div>
 </div>
 
 <div class="card">
@@ -162,12 +175,119 @@ function show(kind, text) {
 }
 function setStatus(t) { el('status').textContent = t; }
 
-function personOptions(selected) {
-  var s = '<option value=""></option>';
+function escAttr(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+var NO_DEPT = 'ไม่ระบุแผนก';
+
+/** จัดรายชื่อเป็นกลุ่มตามแผนก — คืน { แผนก: [ชื่อ, ...] } */
+function groupPeople() {
+  var groups = {};
   PEOPLE.forEach(function (p) {
-    s += '<option value="' + p + '"' + (p === selected ? ' selected' : '') + '>' + p + '</option>';
+    var d = String(p.department || '').trim() || NO_DEPT;
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(p.name);
+  });
+  return groups;
+}
+
+function deptNames() {
+  var groups = groupPeople();
+  var keys = Object.keys(groups).sort();
+  // "ไม่ระบุแผนก" ไว้ท้ายสุดเสมอ
+  var i = keys.indexOf(NO_DEPT);
+  if (i > -1) { keys.splice(i, 1); keys.push(NO_DEPT); }
+  return keys;
+}
+
+/** dropdown เลือกคน — แยก optgroup ตามแผนกเช่นกัน จะได้หาชื่อเจอเมื่อทีมใหญ่ */
+function personOptions(selected) {
+  var groups = groupPeople();
+  var s = '<option value=""></option>';
+  deptNames().forEach(function (d) {
+    s += '<optgroup label="' + escAttr(d) + '">';
+    groups[d].forEach(function (n) {
+      s += '<option value="' + escAttr(n) + '"' + (n === selected ? ' selected' : '') +
+           '>' + escAttr(n) + '</option>';
+    });
+    s += '</optgroup>';
   });
   return s;
+}
+
+/**
+ * รายชื่อผู้เข้าร่วมแบบพับตามแผนก
+ * ทีมที่มีคนเยอะจะเลื่อนหาไม่ไหวถ้าเรียงชิปยาวเป็นพรืด จึงพับไว้และบอกจำนวนที่เลือกไว้ที่หัวกลุ่ม
+ */
+function renderPeople(selected) {
+  var groups = groupPeople();
+  var box = el('people');
+  box.innerHTML = '';
+  var collapse = PEOPLE.length > 12; // ทีมเล็กเปิดไว้เลย จะได้ไม่ต้องกดเพิ่ม
+
+  deptNames().forEach(function (dept) {
+    var picked = groups[dept].filter(function (n) { return selected.indexOf(n) > -1; }).length;
+
+    var wrap = document.createElement('details');
+    wrap.className = 'dept';
+    wrap.open = !collapse || picked > 0;
+
+    var sum = document.createElement('summary');
+    var head = document.createElement('span');
+    head.innerHTML = '<b>' + escAttr(dept) + '</b> <span class="muted">' +
+                     groups[dept].length + ' คน</span>';
+    var badge = document.createElement('span');
+    badge.className = 'pick';
+    sum.appendChild(head);
+    sum.appendChild(badge);
+    wrap.appendChild(sum);
+
+    var row = document.createElement('div');
+    row.className = 'people';
+    groups[dept].forEach(function (name) {
+      var d = document.createElement('div');
+      d.className = 'chip' + (selected.indexOf(name) > -1 ? ' on' : '');
+      d.textContent = name;
+      d.dataset.name = name;
+      d.onclick = function () {
+        d.classList.toggle('on');
+        DIRTY = true;
+        updatePickCounts();
+      };
+      row.appendChild(d);
+    });
+
+    var all = document.createElement('a');
+    all.className = 'alldept';
+    all.textContent = 'เลือกทั้งแผนก';
+    all.onclick = function () {
+      var chips = [].slice.call(row.querySelectorAll('.chip'));
+      var turnOn = chips.some(function (c) { return !c.classList.contains('on'); });
+      chips.forEach(function (c) { c.classList.toggle('on', turnOn); });
+      DIRTY = true;
+      updatePickCounts();
+    };
+    row.appendChild(all);
+
+    wrap.appendChild(row);
+    box.appendChild(wrap);
+  });
+
+  updatePickCounts();
+}
+
+/** อัปเดตตัวเลข "เลือกแล้ว n" ที่หัวกลุ่ม เพื่อให้กลุ่มที่พับอยู่ก็ยังรู้ว่าเลือกใครไว้ */
+function updatePickCounts() {
+  [].slice.call(document.querySelectorAll('#people .dept')).forEach(function (wrap) {
+    var n = wrap.querySelectorAll('.chip.on').length;
+    var badge = wrap.querySelector('.pick');
+    badge.textContent = n ? 'เลือกแล้ว ' + n : '';
+    badge.className = 'pick' + (n ? ' has' : '');
+  });
+  var total = document.querySelectorAll('#people .chip.on').length;
+  el('peopleTotal').textContent = total ? 'เลือกไว้ ' + total + ' คน' : 'ยังไม่ได้เลือกใคร';
 }
 
 function addRow(item) {
@@ -178,9 +298,11 @@ function addRow(item) {
   var tr = document.createElement('tr');
   tr.innerHTML =
     '<td class="n">' + (tb.children.length + 1) + '</td>' +
-    '<td><input class="task" placeholder="เขียนให้ชัดว่าทำอะไร เช่น ส่งใบเสนอราคาให้ฝ่ายจัดซื้อ" value="' + (item.task || '') + '"></td>' +
+    '<td><input class="task" placeholder="ทำอะไร" value="' + escAttr(item.task) + '">' +
+      '<input class="note" placeholder="ต้องใช้อะไร / รออะไรอยู่ (ไม่บังคับ)" value="' +
+      escAttr(item.note) + '"></td>' +
     '<td style="width:150px"><select class="owner">' + personOptions(item.owner) + '</select></td>' +
-    '<td style="width:150px"><input class="due" type="date" value="' + due + '"></td>' +
+    '<td style="width:150px"><input class="due" type="date" value="' + escAttr(due) + '"></td>' +
     '<td style="width:110px"><select class="pri">' +
       ['High', 'Medium', 'Low'].map(function (p) {
         return '<option' + (p === (item.priority || 'Medium') ? ' selected' : '') + '>' + p + '</option>';
@@ -188,6 +310,7 @@ function addRow(item) {
     '<td class="x"><button class="del" title="ลบแถวนี้" onclick="delRow(this)">×</button></td>';
   tb.appendChild(tr);
   tr.querySelector('.task').addEventListener('input', function () { DIRTY = true; });
+  tr.querySelector('.note').addEventListener('input', function () { DIRTY = true; });
   return tr;
 }
 
@@ -222,7 +345,11 @@ function collect() {
     var due = r.querySelector('.due').value;
     // ข้ามแถวที่ยังไม่ได้กรอกอะไรเลย — วันที่ไม่นับ เพราะระบบเติมให้อัตโนมัติทุกแถวใหม่
     if (!task && !owner) continue;
-    items.push({ task: task, owner: owner, due_date: due, priority: r.querySelector('.pri').value });
+    items.push({
+      task: task, owner: owner, due_date: due,
+      priority: r.querySelector('.pri').value,
+      note: r.querySelector('.note').value.trim()
+    });
   }
 
   return {
@@ -235,6 +362,7 @@ function collect() {
     chair: el('chair').value,
     note_taker: el('note_taker').value,
     attendees: attendees,
+    agenda: el('agenda').value,
     decisions: el('decisions').value,
     open_issues: el('open_issues').value,
     next_meeting_at: el('next_meeting_at').value,
@@ -470,7 +598,7 @@ function init(data) {
   el('rows').innerHTML = '';
   el('result').style.display = 'none';
   hideConfirm();
-  ['title', 'start_time', 'end_time', 'location', 'decisions', 'open_issues', 'next_meeting_at']
+  ['title', 'start_time', 'end_time', 'location', 'agenda', 'decisions', 'open_issues', 'next_meeting_at']
     .forEach(function (k) { el(k).value = ''; });
 
   PEOPLE = data.people;
@@ -480,19 +608,10 @@ function init(data) {
   el('chair').innerHTML = personOptions(data.meeting.chair);
   el('note_taker').innerHTML = personOptions(data.meeting.note_taker);
 
-  ['title', 'date', 'start_time', 'end_time', 'location', 'decisions', 'open_issues', 'next_meeting_at']
+  ['title', 'date', 'start_time', 'end_time', 'location', 'agenda', 'decisions', 'open_issues', 'next_meeting_at']
     .forEach(function (k) { if (data.meeting[k]) el(k).value = data.meeting[k]; });
 
-  var box = el('people');
-  box.innerHTML = '';
-  PEOPLE.forEach(function (name) {
-    var d = document.createElement('div');
-    d.className = 'chip' + (data.meeting.attendees.indexOf(name) > -1 ? ' on' : '');
-    d.textContent = name;
-    d.dataset.name = name;
-    d.onclick = function () { d.classList.toggle('on'); DIRTY = true; };
-    box.appendChild(d);
-  });
+  renderPeople(data.meeting.attendees || []);
 
   if (data.items.length) data.items.forEach(addRow);
   else { addRow(); addRow(); addRow(); }

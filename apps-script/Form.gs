@@ -45,9 +45,12 @@ function parseYmdHm_(s) {
 /* ------------------------------------------------------------- โหลดข้อมูลเข้าฟอร์ม */
 
 function formInit() {
+  // ส่งแผนกไปด้วย เพื่อให้ฟอร์มจัดกลุ่มรายชื่อได้เมื่อทีมมีคนเยอะ
   var people = [];
   var map = peopleMap_();
-  Object.keys(map).forEach(function (n) { if (map[n].active) people.push(n); });
+  Object.keys(map).forEach(function (n) {
+    if (map[n].active) people.push({ name: n, department: map[n].department || '' });
+  });
 
   var rows = readTable_(SHEET.MEETINGS);
   var drafts = rows.filter(function (m) {
@@ -60,7 +63,7 @@ function formInit() {
     return {
       people: people,
       meeting: { meeting_id: '', title: '', date: ymd_(new Date()), start_time: '', end_time: '',
-                 location: '', chair: '', note_taker: '', attendees: [], decisions: '',
+                 location: '', chair: '', note_taker: '', attendees: [], agenda: '', decisions: '',
                  open_issues: '', next_meeting_at: '', sent: false },
       items: []
     };
@@ -71,7 +74,8 @@ function formInit() {
       task: String(it.task || ''),
       owner: String(it.owner || ''),
       due_date: ymd_(it.due_date),
-      priority: String(it.priority || 'Medium')
+      priority: String(it.priority || 'Medium'),
+      note: String(it.note || '')
     };
   });
 
@@ -87,6 +91,7 @@ function formInit() {
       chair: String(m.chair || ''),
       note_taker: String(m.note_taker || ''),
       attendees: splitNames_(m.attendees),
+      agenda: String(m.agenda || ''),
       decisions: String(m.decisions || ''),
       open_issues: String(m.open_issues || ''),
       next_meeting_at: ymdhm_(m.next_meeting_at),
@@ -211,6 +216,7 @@ function upsertMeeting_(p) {
     note_taker: String(p.note_taker || ''),
     attendees: (p.attendees || []).join(', '),
     absentees: base.absentees || '',
+    agenda: String(p.agenda || '').trim(),
     decisions: String(p.decisions || '').trim(),
     open_issues: String(p.open_issues || '').trim(),
     next_meeting_at: parseYmdHm_(p.next_meeting_at),
@@ -260,7 +266,8 @@ function replaceItems_(meetingId, items) {
       parseYmd_(it.due_date),
       String(it.priority || 'Medium'),
       old.status || 'Open',
-      old.note || ''
+      // หมายเหตุมาจากฟอร์มแล้ว ถ้าฟอร์มไม่ได้ส่งมาค่อยใช้ของเดิมในชีต
+      it.note === undefined ? (old.note || '') : String(it.note || '')
     ]);
   });
 

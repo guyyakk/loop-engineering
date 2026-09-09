@@ -29,6 +29,13 @@ function esc_(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** จำกัดจำนวนงานที่แสดง — MAX_ITEMS_IN_IMAGE = 0 แปลว่าไม่จำกัด */
+function limitItems_(sorted) {
+  var max = cfgInt_('MAX_ITEMS_IN_IMAGE');
+  if (!max || max <= 0 || sorted.length <= max) return { shown: sorted, rest: 0 };
+  return { shown: sorted.slice(0, max), rest: sorted.length - max };
+}
+
 function sortItems_(items) {
   return items.slice().sort(function (a, b) {
     var da = toDate_(a.due_date), db = toDate_(b.due_date);
@@ -121,6 +128,10 @@ function buildEmailHtml_(meeting, items) {
     }
   }
 
+  if (String(meeting.agenda || '').trim()) {
+    html += '<div ' + h2 + '><b>วาระการประชุม</b></div>' + bulletsHtml_(meeting.agenda);
+  }
+
   if (String(meeting.decisions || '').trim()) {
     html += '<div ' + h2 + '><b>มติที่ประชุม</b></div>' + bulletsHtml_(meeting.decisions);
   }
@@ -159,11 +170,23 @@ function buildPersonalEmailHtml_(meeting, ownerName, ownerItems) {
 
 function buildLineText_(meeting, items) {
   var sorted = sortItems_(items);
-  var max = cfgInt_('MAX_ITEMS_IN_IMAGE');
+  var lim = limitItems_(sorted);
   var lines = [];
   lines.push('📋 สรุปประชุม: ' + String(meeting.title || '').trim());
   lines.push('🗓 ' + meetingHeadline_(meeting));
+
+  var attendees = splitNames_(meeting.attendees);
+  if (attendees.length) {
+    lines.push('👥 ผู้เข้าร่วม (' + attendees.length + '): ' + attendees.join(', '));
+  }
   lines.push('');
+
+  var agenda = splitLines_(meeting.agenda);
+  if (agenda.length) {
+    lines.push('📑 วาระ');
+    agenda.forEach(function (a, i) { lines.push((i + 1) + '. ' + a); });
+    lines.push('');
+  }
 
   var decisions = splitLines_(meeting.decisions);
   if (decisions.length) {
@@ -173,12 +196,22 @@ function buildLineText_(meeting, items) {
   }
 
   lines.push('📌 งานที่ต้องทำ (' + sorted.length + ')');
-  sorted.slice(0, max).forEach(function (it, i) {
+  lim.shown.forEach(function (it, i) {
     lines.push((i + 1) + '. ' + String(it.owner).trim() + ' — ' + String(it.task).trim() +
       ' · ครบ ' + fmtDate_(it.due_date));
+    if (String(it.note || '').trim()) {
+      lines.push('    ต้องใช้: ' + String(it.note).trim());
+    }
   });
-  if (sorted.length > max) {
-    lines.push('…และอีก ' + (sorted.length - max) + ' รายการ ดูรายละเอียดในอีเมล');
+  if (lim.rest) {
+    lines.push('…และอีก ' + lim.rest + ' รายการ ดูรายละเอียดในอีเมล');
+  }
+
+  var openIssues = splitLines_(meeting.open_issues);
+  if (openIssues.length) {
+    lines.push('');
+    lines.push('⏳ ประเด็นค้าง');
+    openIssues.forEach(function (o) { lines.push('• ' + o); });
   }
 
   if (toDate_(meeting.next_meeting_at)) {

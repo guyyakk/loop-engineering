@@ -18,7 +18,16 @@ STUB = """
 <script>
 // ---- stub ของ google.script.run สำหรับทดสอบ UI เท่านั้น ----
 var CALLS = [];
-var FAKE_CTX = { dry_run: true, send_individual: false, people_total: 3, people_with_email: 0 };
+var FAKE_CTX = { dry_run: true, send_individual: false, people_total: 14, people_with_email: 0 };
+var FAKE_PEOPLE = [
+  { name: 'กษมา', department: 'QA&QC' }, { name: 'นิภาพร', department: 'QA&QC' },
+  { name: 'ปณชัย', department: 'QC' }, { name: 'สมชาย', department: 'QC' },
+  { name: 'สุดา', department: 'QC' }, { name: 'ประเสริฐ', department: 'QC' },
+  { name: 'วิภา', department: 'QC' }, { name: 'ธนกร', department: 'Production' },
+  { name: 'อรุณ', department: 'Production' }, { name: 'พิมพ์ใจ', department: 'Production' },
+  { name: 'ชัยวัฒน์', department: 'Production' }, { name: 'มานพ', department: 'Warehouse' },
+  { name: 'เกษม', department: 'Warehouse' }, { name: 'แขกรับเชิญ', department: '' }
+];
 // google.script.run ของจริงคืนอ็อบเจ็กต์ใหม่ทุกครั้งที่เข้าถึง ทำให้เรียกหลายคำสั่งพร้อมกันได้
 // สตับจึงต้องใช้ getter ไม่งั้น handler ของคำสั่งที่เรียกทีหลังจะไปทับของคำสั่งแรก
 var google = { script: { get run() { return makeApi(); } } };
@@ -34,9 +43,9 @@ function makeApi() {
       CALLS.push('formInit');
       later(function () {
         h.s({
-          people: ['สมชาย', 'สุดา', 'ประเสริฐ'],
+          people: FAKE_PEOPLE,
           meeting: { meeting_id: '', title: '', date: '2026-09-08', start_time: '', end_time: '',
-                     location: '', chair: '', note_taker: '', attendees: [], decisions: '',
+                     location: '', chair: '', note_taker: '', attendees: [], agenda: '', decisions: '',
                      open_issues: '', next_meeting_at: '', sent: false },
           items: []
         });
@@ -66,9 +75,9 @@ function makeApi() {
       CALLS.push('webStartNew');
       later(function () {
         h.s({
-          people: ['สมชาย', 'สุดา', 'ประเสริฐ'],
+          people: FAKE_PEOPLE,
           meeting: { meeting_id: 'MOM-2026-002', title: '', date: '2026-09-09', start_time: '', end_time: '',
-                     location: '', chair: '', note_taker: '', attendees: [], decisions: '',
+                     location: '', chair: '', note_taker: '', attendees: [], agenda: '', decisions: '',
                      open_issues: '', next_meeting_at: '', sent: false },
           items: []
         });

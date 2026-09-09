@@ -5,10 +5,12 @@
  * ฟังก์ชันนี้ไม่ลบข้อมูลเดิม ถ้าหัวตารางไม่ตรงกับที่ระบบต้องการจะเตือนแทนการเขียนทับ
  */
 
+// คอลัมน์ใหม่ต้องต่อท้ายเสมอ ห้ามแทรกกลาง เพราะชีตที่มีข้อมูลอยู่แล้วจะอัปเกรดไม่ได้
+// (ดูการอัปเกรดอัตโนมัติใน setupSheets — เติมเฉพาะคอลัมน์ที่ขาดท้ายตาราง)
 var HEADERS = {};
 HEADERS[SHEET.MEETINGS] = ['meeting_id', 'title', 'date', 'start_time', 'end_time', 'location',
   'chair', 'note_taker', 'attendees', 'absentees', 'decisions', 'open_issues',
-  'next_meeting_at', 'status', 'sent_at', 'image_url'];
+  'next_meeting_at', 'status', 'sent_at', 'image_url', 'agenda'];
 HEADERS[SHEET.ITEMS] = ['item_id', 'meeting_id', 'task', 'owner', 'due_date', 'priority', 'status', 'note'];
 HEADERS[SHEET.PEOPLE] = ['name', 'email', 'department', 'active'];
 
@@ -17,6 +19,7 @@ var LAST_ROW = 1000; // ช่วงแถวที่ใส่ dropdown แล�
 function setupSheets() {
   var ss = ss_();
   var created = [];
+  var migrated = [];
   var mismatched = [];
 
   Object.keys(HEADERS).forEach(function (name) {
@@ -31,8 +34,16 @@ function setupSheets() {
       .map(function (h) { return String(h).trim(); })
       .filter(function (h) { return h !== ''; });
 
+    var missing = expected.slice(current.length);
+    var isOlderVersion = current.length < expected.length &&
+      expected.slice(0, current.length).join('|') === current.join('|');
+
     if (!current.length) {
       sh.getRange(1, 1, 1, expected.length).setValues([expected]);
+    } else if (isOlderVersion) {
+      // ชีตเวอร์ชันเก่าที่ยังไม่มีคอลัมน์ใหม่ — เติมต่อท้ายให้ ข้อมูลเดิมไม่ขยับ
+      sh.getRange(1, current.length + 1, 1, missing.length).setValues([missing]);
+      migrated.push(name + ': เพิ่มคอลัมน์ ' + missing.join(', '));
     } else if (expected.join('|') !== current.slice(0, expected.length).join('|')) {
       mismatched.push(name + ': ต้องการ [' + expected.join(', ') + '] แต่พบ [' + current.join(', ') + ']');
       return; // ไม่เขียนทับหัวตารางที่มีข้อมูลอยู่แล้ว
@@ -57,6 +68,11 @@ function setupSheets() {
 
   var msg = ['ตั้งค่าชีตเรียบร้อย'];
   msg.push('สร้างใหม่: ' + (created.length ? created.join(', ') : 'ไม่มี (มีอยู่แล้วทั้งหมด)'));
+  if (migrated.length) {
+    msg.push('');
+    msg.push('อัปเกรดชีตเดิม:');
+    migrated.forEach(function (m) { msg.push('   • ' + m); });
+  }
   if (mismatched.length) {
     msg.push('');
     msg.push('⚠ หัวตารางไม่ตรงกับที่ระบบต้องการ ระบบไม่ได้แก้ให้เพื่อกันข้อมูลเสียหาย:');
@@ -91,6 +107,7 @@ HEADER_NOTES[SHEET.MEETINGS] = {
   decisions: 'มติที่ประชุม บรรทัดละ 1 ข้อ (ขึ้นบรรทัดใหม่ด้วย Alt+Enter)',
   open_issues: 'ประเด็นค้างที่ยังไม่มีเจ้าภาพ บรรทัดละ 1 ข้อ',
   next_meeting_at: 'วันเวลาประชุมครั้งถัดไป',
+  agenda: 'วาระการประชุม บรรทัดละ 1 วาระ',
   status: 'draft = ยังไม่ส่ง / sent = ส่งอีเมลแล้ว ระบบเขียนให้เอง',
   sent_at: 'เวลาที่ส่งอีเมลสำเร็จ ระบบเขียนให้เอง ล้างช่องนี้ถ้าต้องการส่งซ้ำ',
   image_url: 'ลิงก์รูปสรุปล่าสุด ระบบเขียนให้เอง'
@@ -103,7 +120,7 @@ HEADER_NOTES[SHEET.ITEMS] = {
   due_date: 'จำเป็น — กำหนดเสร็จ ต้องไม่ย้อนหลังกว่าวันประชุม',
   priority: 'High / Medium / Low',
   status: 'Open → In progress → Done (หรือ Blocked ถ้าติดปัญหา) ช่องนี้อัปเดตเองระหว่างสัปดาห์',
-  note: 'สิ่งที่ต้องรอ หรือปัญหาที่ติดอยู่'
+  note: 'สิ่งที่ต้องใช้ สิ่งที่ต้องรอ หรือปัญหาที่ติดอยู่'
 };
 HEADER_NOTES[SHEET.PEOPLE] = {
   name: 'ชื่อที่จะโผล่ใน dropdown ของฟอร์มและชีตงาน',
@@ -196,12 +213,13 @@ function applyFormats_() {
   meetings.setColumnWidth(colIndex_(SHEET.MEETINGS, 'title'), 220);
   meetings.setColumnWidth(colIndex_(SHEET.MEETINGS, 'attendees'), 260);
   meetings.setColumnWidth(colIndex_(SHEET.MEETINGS, 'decisions'), 300);
+  meetings.setColumnWidth(colIndex_(SHEET.MEETINGS, 'agenda'), 300);
   meetings.setColumnWidth(colIndex_(SHEET.MEETINGS, 'open_issues'), 260);
   items.setColumnWidth(colIndex_(SHEET.ITEMS, 'task'), 380);
   items.setColumnWidth(colIndex_(SHEET.ITEMS, 'note'), 220);
 
   // ช่องที่พิมพ์ยาวหลายบรรทัด ให้ตัดคำอัตโนมัติ จะได้เห็นทั้งหมดระหว่างประชุม
-  [['decisions'], ['open_issues'], ['attendees']].forEach(function (h) {
+  [['decisions'], ['open_issues'], ['attendees'], ['agenda']].forEach(function (h) {
     meetings.getRange(2, colIndex_(SHEET.MEETINGS, h[0]), rows, 1).setWrap(true);
   });
   items.getRange(2, colIndex_(SHEET.ITEMS, 'task'), rows, 1).setWrap(true);
