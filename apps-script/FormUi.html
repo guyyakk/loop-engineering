@@ -411,17 +411,28 @@ function busy(on) {
 function handleFailure(e, retryFn) {
   busy(false);
   var msg = String((e && e.message) || e);
-  if (msg.indexOf('CONFLICT') === 0) {
+  // ต้องหาแบบ "มีคำนี้อยู่ในข้อความ" ไม่ใช่ "ขึ้นต้นด้วย"
+  // เพราะ Apps Script เติม "Error: " นำหน้าข้อความที่โยนมาจากฝั่งเซิร์ฟเวอร์
+  if (msg.indexOf('CONFLICT') > -1) {
     setStatus('ข้อมูลชนกัน รอการตัดสินใจ');
     showConfirm(
-      '⚠ <b>ข้อมูลชนกัน</b><br>' + escAttr(msg.replace('CONFLICT:', '').trim()) +
-      '<br><br>กดยืนยัน = บันทึกทับด้วยข้อมูลในหน้านี้' +
-      '<br>กดยกเลิก = ไม่บันทึก (เปิดลิงก์ใหม่อีกแท็บเพื่อดูข้อมูลล่าสุดก่อนได้)',
+      '⚠ <b>ข้อมูลชนกัน</b><br>' + escAttr(cleanMessage(msg)) +
+      '<br><br><b>กดยืนยัน</b> = บันทึกทับด้วยข้อมูลในหน้านี้ (ข้อมูลที่อีกฝั่งเพิ่งใส่จะหาย)' +
+      '<br><b>กดยกเลิก</b> = ไม่บันทึก · อย่าเพิ่งรีเฟรชถ้ายังไม่ได้บันทึก เพราะสิ่งที่พิมพ์ค้างไว้จะหาย',
       function () { FORCE_SAVE = true; retryFn(); });
     return;
   }
   setStatus('ไม่สำเร็จ');
-  show('err', 'เกิดข้อผิดพลาด: ' + msg);
+  show('err', 'เกิดข้อผิดพลาด: ' + cleanMessage(msg));
+}
+
+/** ตัดคำนำหน้าที่ระบบเติมมา ให้เหลือแต่ข้อความที่คนอ่านรู้เรื่อง */
+function cleanMessage(msg) {
+  return String(msg)
+    .replace('Error:', '')
+    .replace('Exception:', '')
+    .replace('CONFLICT:', '')
+    .trim();
 }
 
 /** จำเวลาที่บันทึกล่าสุดของประชุมนี้ไว้ เพื่อให้เซิร์ฟเวอร์ตรวจได้ว่าข้อมูลในมือยังใหม่ไหม */
