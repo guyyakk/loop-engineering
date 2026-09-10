@@ -41,6 +41,21 @@ function logError_(fnName, e) {
   }
 }
 
+/** บันทึกข้อสังเกตที่ไม่ใช่ error ลงชีต log ใช้ตอนต้องรู้ว่าเกิดอะไรขึ้นจริงบนเครื่องผู้ใช้ */
+function logInfo_(fnName, message) {
+  try {
+    var sh = ss_().getSheetByName(LOG_SHEET);
+    if (!sh) {
+      sh = ss_().insertSheet(LOG_SHEET);
+      sh.getRange(1, 1, 1, LOG_HEADERS.length).setValues([LOG_HEADERS]);
+      sh.setFrozenRows(1);
+    }
+    sh.appendRow([new Date(), currentUserEmail_(), fnName, String(message).slice(0, 900)]);
+  } catch (ignored) {
+    Logger.log('เขียน log ไม่สำเร็จ: %s', ignored.message);
+  }
+}
+
 function currentUserEmail_() {
   try {
     return String(Session.getActiveUser().getEmail() || '').trim();
