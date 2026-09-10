@@ -18,7 +18,7 @@ STUB = """
 <script>
 // ---- stub ของ google.script.run สำหรับทดสอบ UI เท่านั้น ----
 var CALLS = [];
-var FAKE_CTX = { dry_run: true, send_individual: false, people_total: 14, people_with_email: 0 };
+var FAKE_CTX = { build: '2026-09-10 21:30', dry_run: true, send_individual: false, people_total: 14, people_with_email: 0 };
 var FAKE_PEOPLE = [
   { name: 'กษมา', department: 'QA&QC' }, { name: 'นิภาพร', department: 'QA&QC' },
   { name: 'ปณชัย', department: 'QC' }, { name: 'สมชาย', department: 'QC' },

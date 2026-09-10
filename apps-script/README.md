@@ -17,6 +17,11 @@
 | `Image.gs` | สร้าง PNG สรุปฉบับเต็มผ่าน Google Slides แล้วเก็บลง Drive |
 | `Menu.gs` | เมนู "MOM" ในชีต (ทางเลือกสำรอง) |
 | `WebApp.gs` | `doGet` เสิร์ฟฟอร์มเป็น Web App + ขั้นตอนปิดประชุมแบบไม่ใช้ dialog ของชีต |
+| `Build.gs` | ประทับเวลาที่ deploy ล่าสุด — `tools/deploy.ps1` เขียนทับให้เอง อย่าแก้มือ |
+| `tools/verify.js` | ตรวจทุกอย่างก่อน deploy ด้วยคำสั่งเดียว |
+| `tools/deploy.ps1` | ตรวจ → ประทับเวอร์ชัน → push → deploy ทับ deployment เดิม |
+| `tests/smoke.js` | เทสต์ฟังก์ชันบริสุทธิ์ (validation, การจัดรูปแบบ, เนื้อหาในรูป) |
+| `tests/sheet_smoke.js` + `tests/fake_sheets.js` | เทสต์ชั้นที่คุยกับชีต ด้วย SpreadsheetApp ปลอมในหน่วยความจำ |
 | `tests/make_preview.py` | สร้างไฟล์พรีวิวที่ stub `google.script.run` ไว้ทดสอบ UI ในเบราว์เซอร์ก่อน deploy |
 | `appsscript.json` | manifest — timezone และการเปิด Advanced Slides Service |
 
@@ -35,6 +40,33 @@
 
 > ครั้งแรกที่รัน Google จะเตือนว่าแอปยังไม่ผ่านการตรวจสอบ ให้กด Advanced → Go to (ชื่อโปรเจกต์)
 > เป็นเรื่องปกติของสคริปต์ที่เขียนเอง เพราะเจ้าของสคริปต์คือบัญชีของคุณเอง
+
+## แก้โค้ดแล้วเอาขึ้นยังไง
+
+```powershell
+.	ools\deploy.ps1 "อธิบายสั้น ๆ ว่าแก้อะไร"
+```
+
+สคริปต์เดียวจบ: ตรวจ → ประทับเวอร์ชันลง `Build.gs` → `clasp push` → `clasp deploy` **ทับ deployment เดิม**
+(หา deploymentId ให้เอง จึงไม่มีทางเผลอสร้าง deployment ใหม่ ซึ่งจะทำให้ URL เปลี่ยน)
+ถ้าตรวจไม่ผ่าน สคริปต์จะหยุดก่อน push
+
+ตรวจอย่างเดียวไม่ deploy:
+
+```bash
+node tools/verify.js
+```
+
+ตรวจ 4 อย่าง: คอมไพล์ `.gs` ทุกไฟล์ · คอมไพล์ JavaScript ใน `FormUi.html` ·
+เทสต์ฟังก์ชันบริสุทธิ์ · เทสต์ชั้นที่คุยกับชีต
+
+ทดสอบหน้าจอโดยไม่ต้อง deploy (ได้ไฟล์ที่เปิดในเบราว์เซอร์ธรรมดาแล้วกดปุ่มจริงได้):
+
+```bash
+python tests/make_preview.py
+```
+
+หลัง deploy หน้าเว็บจะโชว์ "เวอร์ชัน YYYY-MM-DD HH:mm" ที่แถบล่าง ใช้ยืนยันว่าผู้ใช้ refresh แล้วจริง
 
 ## ค่าตั้งค่า (Script Properties)
 
@@ -109,8 +141,8 @@
 | 9 | ปิด `DRY_RUN` แล้วส่งเข้าอีเมลตัวเองก่อน | ได้อีเมลจริง ตารางเรียงตามกำหนดเสร็จ |
 | 10 | สั่ง 📧 ซ้ำ | ขึ้น "ส่งไปแล้วเมื่อ ..." และไม่ส่งซ้ำ |
 
-**สถานะการตรวจของสคริปต์ชุดนี้: ยังไม่ได้รัน** — Apps Script รันได้เฉพาะบนบัญชี Google ของคุณ
-ผลการทดสอบทั้ง 10 ข้อให้บันทึกลงตาราง Validation plan ใน
+ข้อ 1–5 ทดสอบอัตโนมัติแล้วด้วย `node tools/verify.js` ส่วนข้อที่เหลือต้องรันบนบัญชี Google จริง
+ผลการทดสอบให้บันทึกลงตาราง Validation plan ใน
 [docs/tasks/2026-09-07-mom-summary-distribution.md](../docs/tasks/2026-09-07-mom-summary-distribution.md)
 
 ## รูปสรุปมีอะไรบ้าง

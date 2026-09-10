@@ -53,6 +53,7 @@
   .mode.test { background:#fff9db; border:1px solid #ffe066; color:#856404; }
   .mode.live { background:#fff5f5; border:1px solid #ffc9c9; color:#c92a2a; font-weight:bold; }
   .mode a { margin-left:6px; cursor:pointer; text-decoration:underline; }
+  .build { margin-left:10px; font-size:11px; color:var(--muted); white-space:nowrap; }
   .result { margin:12px; padding:14px 16px; border:1px solid #b2f2bb; background:#ebfbee; border-radius:8px; display:none; }
   .result h3 { margin:0 0 8px; font-size:14px; color:#2b8a3e; }
   .result .row { margin:8px 0; }
@@ -157,6 +158,7 @@
   <span class="sp">
     <span id="status">กำลังโหลด…</span>
     <span id="mode" class="mode"></span>
+    <span id="build" class="build"></span>
   </span>
   <button class="btn" id="bSave" onclick="save(false)">บันทึกร่าง</button>
   <button class="btn primary" id="bDone" onclick="finish()">ปิดประชุม &amp; ส่งสรุป</button>
@@ -552,6 +554,8 @@ var CTX = null;
 
 function renderMode(ctx) {
   CTX = ctx;
+  // แสดงเวอร์ชันที่กำลังรันอยู่ เพื่อตอบคำถาม "refresh แล้วหรือยัง" ได้ทันทีเวลาดีบัก
+  el('build').textContent = ctx.build ? 'เวอร์ชัน ' + ctx.build : '';
   var m = el('mode');
   if (ctx.dry_run) {
     m.className = 'mode test';

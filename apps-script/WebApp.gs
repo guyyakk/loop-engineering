@@ -25,6 +25,7 @@ function webContext() {
     if (map[n].email) withEmail++;
   });
   return {
+    build: (typeof BUILD_STAMP === 'string' ? BUILD_STAMP : ''),
     dry_run: cfgBool_('DRY_RUN'),
     send_individual: cfgBool_('SEND_INDIVIDUAL'),
     people_total: total,
@@ -70,51 +71,66 @@ function webPreview(p) {
 
 /**
  * ขั้นที่ 2: ส่งจริง (ตามโหมด DRY_RUN) แล้วสร้างรูปกับข้อความสำหรับ LINE
- * ถ้าประชุมนี้ส่งอีเมลไปแล้ว จะข้ามการส่งแต่ยังสร้างรูปใหม่ให้
+ *
+ * แบ่งเป็นสองช่วงโดยตั้งใจ:
+ *  - ช่วงที่ถือล็อก = บันทึก + ตรวจ + อ่านสถานะ + ส่งอีเมล + ปั๊มสถานะเป็น sent
+ *    ทั้งหมดนี้ต้องเป็นก้อนเดียวกัน ไม่งั้นเปิดสองแท็บแล้วกดพร้อมกันจะเห็นสถานะเป็น draft
+ *    ทั้งคู่แล้วส่งอีเมลซ้ำ กลไกกันส่งซ้ำจะใช้ไม่ได้เลย
+ *  - ช่วงที่ไม่ถือล็อก = สร้างรูป ซึ่งใช้เวลา 10–20 วินาทีและไม่แตะสถานะร่วม
+ *    ถ้าถือล็อกไว้ตลอด คนอื่นจะกดบันทึกไม่ได้ทั้งที่ไม่จำเป็น
  */
 function webFinish(p) {
-  var saved = formSave(p, true);
-  if (saved.errors.length) return { ok: false, errors: saved.errors };
+  var prepared = withDocumentLock_(function () {
+    var saved = formSaveCore_(p, true);
+    if (saved.errors.length) return { ok: false, errors: saved.errors };
 
-  var id = saved.meeting_id;
-  var meeting = findMeeting_(id);
-  var items = getItems_(id);
-  var out = { ok: true, meeting_id: id, errors: [], warnings: saved.warnings };
+    var id = saved.meeting_id;
+    var meeting = findMeeting_(id);
+    var out = { ok: true, meeting_id: id, errors: [], warnings: saved.warnings };
 
-  if (String(meeting.status || '').toLowerCase() === STATUS.SENT) {
-    out.already_sent = true;
-    out.sent_at = fmtDateTime_(meeting.sent_at);
-  } else {
-    // อีเมลกับรูปเป็นอิสระต่อกัน ถ้าเมลมีปัญหาก็ยังต้องได้รูปกับข้อความสำหรับ LINE
-    try {
-      var res = sendSummaryEmails_(meeting, items);
-      out.dry_run = res.dryRun;
-      out.recipients = res.to.length;
-      out.personal = res.personalCount;
-      out.quota_left = res.quotaLeft;
-      out.email_skipped = res.skipped || '';
-      if (!res.dryRun && !res.skipped) {
-        setCell_(SHEET.MEETINGS, meeting._row, 'status', STATUS.SENT);
-        setCell_(SHEET.MEETINGS, meeting._row, 'sent_at', new Date());
+    if (String(meeting.status || '').toLowerCase() === STATUS.SENT) {
+      out.already_sent = true;
+      out.sent_at = fmtDateTime_(meeting.sent_at);
+    } else {
+      // อีเมลกับรูปเป็นอิสระต่อกัน ถ้าเมลมีปัญหาก็ยังต้องได้รูปกับข้อความสำหรับ LINE
+      try {
+        var res = sendSummaryEmails_(meeting, getItems_(id));
+        out.dry_run = res.dryRun;
+        out.recipients = res.to.length;
+        out.personal = res.personalCount;
+        out.quota_left = res.quotaLeft;
+        out.email_skipped = res.skipped || '';
+        if (!res.dryRun && !res.skipped) {
+          setCell_(SHEET.MEETINGS, meeting._row, 'status', STATUS.SENT);
+          setCell_(SHEET.MEETINGS, meeting._row, 'sent_at', new Date());
+        }
+      } catch (e) {
+        out.email_error = String(e.message || e);
       }
-    } catch (e) {
-      out.email_error = String(e.message || e);
     }
-  }
+    return out;
+  });
+
+  if (!prepared.ok) return prepared;
+
+  var meeting = findMeeting_(prepared.meeting_id);
+  var items = getItems_(prepared.meeting_id);
 
   try {
     var img = buildMeetingImage_(meeting, items);
-    setCell_(SHEET.MEETINGS, meeting._row, 'image_url', img.url);
-    out.image_url = img.url;
-    out.image_name = img.name;
-    out.image_data = 'data:image/png;base64,' + img.base64;
+    withDocumentLock_(function () {
+      setCell_(SHEET.MEETINGS, meeting._row, 'image_url', img.url);
+    });
+    prepared.image_url = img.url;
+    prepared.image_name = img.name;
+    prepared.image_data = 'data:image/png;base64,' + img.base64;
   } catch (e) {
     // รูปพังไม่ควรทำให้ทั้งขั้นตอนล้ม เพราะอีเมลส่งไปแล้ว
-    out.image_error = String(e.message || e);
+    prepared.image_error = String(e.message || e);
   }
 
-  out.line_text = buildLineText_(meeting, items);
-  return out;
+  prepared.line_text = buildLineText_(meeting, items);
+  return prepared;
 }
 
 /**
@@ -124,9 +140,7 @@ function webFinish(p) {
  * ระบบจะถือว่าให้เขียนทับร่างล่าสุด ซึ่งจะไปทับประชุมที่เพิ่งปิดไป
  */
 function webStartNew() {
-  var lock = LockService.getDocumentLock();
-  lock.waitLock(20000);
-  try {
+  return withDocumentLock_(function () {
     var sh = sheet_(SHEET.MEETINGS);
     var headers = HEADERS[SHEET.MEETINGS];
     var vals = { meeting_id: nextMeetingId_(), date: new Date(), status: STATUS.DRAFT };
@@ -134,9 +148,7 @@ function webStartNew() {
       return vals[h] === undefined ? '' : vals[h];
     })]);
     return formInit(); // ร่างล่าสุดคือแถวที่เพิ่งสร้าง
-  } finally {
-    lock.releaseLock();
-  }
+  });
 }
 
 function findMeeting_(id) {

@@ -104,38 +104,59 @@ function formInit() {
 /* ------------------------------------------------------------------ บันทึกกลับชีต */
 
 /**
+ * ล็อกเอกสารรอบงานที่แตะข้อมูลร่วม
+ *
+ * ต้องมีตัวช่วยนี้เพราะ LockService ไม่ใช่ reentrant — ถ้าฟังก์ชันที่ถือล็อกอยู่
+ * ไปเรียกอีกฟังก์ชันที่ขอล็อกซ้ำ จะค้างจนหมดเวลา ฟังก์ชันภายในจึงต้องเป็นเวอร์ชัน
+ * "Core" ที่ไม่ขอล็อกเอง แล้วให้ผู้เรียกชั้นนอกสุดเป็นคนถือล็อกแทน
+ */
+function withDocumentLock_(fn) {
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) {
+    throw new Error('มีการบันทึกอื่นค้างอยู่ ลองใหม่อีกครั้งใน 2–3 วินาที ' +
+                    '(เกิดได้ถ้าเปิดฟอร์มหลายแท็บแล้วกดพร้อมกัน)');
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
  * บันทึกข้อมูลจากฟอร์มลงชีต
  * @param {Object} p ข้อมูลจากฟอร์ม
  * @param {boolean} check true = ตรวจความถูกต้องแล้วส่งผลกลับไปแสดงในฟอร์มด้วย
  */
 function formSave(p, check) {
-  var lock = LockService.getDocumentLock();
-  lock.waitLock(20000); // กันสองคนกดบันทึกพร้อมกันแล้วเขียนทับกัน
-  try {
-    var res = upsertMeeting_(p);
-    replaceItems_(res.id, p.items || [], p);
+  return withDocumentLock_(function () {
+    return formSaveCore_(p, check);
+  });
+}
 
-    var out = {
-      meeting_id: res.id,
-      saved_at: Utilities.formatDate(new Date(), tz_(), 'HH:mm:ss'),
-      item_count: (p.items || []).length,
-      errors: [],
-      warnings: []
-    };
+/** เนื้อในของ formSave ที่ไม่ขอล็อกเอง — ผู้เรียกต้องถือล็อกมาแล้ว */
+function formSaveCore_(p, check) {
+  var res = upsertMeeting_(p);
+  replaceItems_(res.id, p.items || []);
 
-    if (check) {
-      var meeting = readTable_(SHEET.MEETINGS).filter(function (m) {
-        return String(m.meeting_id).trim() === res.id;
-      })[0];
-      var saved = getItems_(res.id);
-      var v = validateMeeting_(meeting, saved);
-      out.errors = formatIssues_(v.errors, saved);
-      out.warnings = formatIssues_(v.warnings, saved);
-    }
-    return out;
-  } finally {
-    lock.releaseLock();
+  var out = {
+    meeting_id: res.id,
+    saved_at: Utilities.formatDate(new Date(), tz_(), 'HH:mm:ss'),
+    item_count: (p.items || []).length,
+    errors: [],
+    warnings: []
+  };
+
+  if (check) {
+    var meeting = readTable_(SHEET.MEETINGS).filter(function (m) {
+      return String(m.meeting_id).trim() === res.id;
+    })[0];
+    var saved = getItems_(res.id);
+    var v = validateMeeting_(meeting, saved);
+    out.errors = formatIssues_(v.errors, saved);
+    out.warnings = formatIssues_(v.warnings, saved);
   }
+  return out;
 }
 
 /**
@@ -162,11 +183,6 @@ function formatIssues_(msgs, items) {
     }
   });
   return out;
-}
-
-/** เก็บไว้เผื่อโค้ดเดิมเรียกใช้ */
-function stripRowPrefix_(msg) {
-  return formatIssues_([msg], [])[0];
 }
 
 function nextMeetingId_() {
@@ -233,45 +249,64 @@ function upsertMeeting_(p) {
 }
 
 /**
- * เขียนรายการงานของประชุมนี้ใหม่ทั้งชุด โดยไม่แตะงานของประชุมอื่น
- * สถานะและหมายเหตุเดิมถูกเก็บไว้ด้วยการจับคู่จาก task+owner เพราะฟอร์มไม่ได้แก้สองช่องนี้
+ * เขียนรายการงานของประชุมนี้ใหม่ โดยแตะเฉพาะแถวของประชุมนี้เท่านั้น
+ *
+ * เดิมฟังก์ชันนี้ล้างทั้งชีตแล้วเขียนกลับทุกครั้งที่บันทึก ซึ่งแปลว่าการกดบันทึกร่าง
+ * หนึ่งครั้งเสี่ยงกับข้อมูลของ "ทุกประชุมที่เคยมี" ถ้าสคริปต์ตายกลางคัน
+ *
+ * ลำดับที่ใช้คือ เขียนแถวใหม่ต่อท้ายก่อน แล้วค่อยลบแถวเก่า
+ * ถ้าพังกลางคันจะได้ข้อมูลซ้ำ ซึ่งการบันทึกครั้งถัดไปจะล้างให้เอง — ดีกว่าข้อมูลหาย
+ *
+ * สถานะและหมายเหตุเดิมถูกเก็บไว้ด้วยการจับคู่จาก task+owner เพราะฟอร์มไม่ได้แก้ช่องสถานะ
  */
 function replaceItems_(meetingId, items) {
   var sh = sheet_(SHEET.ITEMS);
   var headers = HEADERS[SHEET.ITEMS];
-  var all = readTable_(SHEET.ITEMS);
+  var mine = readTable_(SHEET.ITEMS).filter(function (it) {
+    return String(it.meeting_id || '').trim() === String(meetingId).trim();
+  });
 
   var keep = {};
-  all.forEach(function (it) {
-    if (String(it.meeting_id || '').trim() !== meetingId) return;
+  mine.forEach(function (it) {
     keep[String(it.task || '').trim() + '|' + String(it.owner || '').trim()] = {
-      status: it.status || 'Open',
+      status: it.status || ITEM_STATUS[0],
       note: it.note || ''
     };
   });
 
-  var rows = [];
-  all.forEach(function (it) {
-    if (String(it.meeting_id || '').trim() === meetingId) return; // ของประชุมนี้จะเขียนใหม่ท้ายสุด
-    rows.push(headers.map(function (h) { return it[h] === undefined ? '' : it[h]; }));
-  });
-
-  items.forEach(function (it, i) {
+  var rows = (items || []).map(function (it, i) {
     var old = keep[String(it.task || '').trim() + '|' + String(it.owner || '').trim()] || {};
-    rows.push([
+    return [
       meetingId + '-A' + (i + 1),
       meetingId,
       String(it.task || '').trim(),
       String(it.owner || ''),
       parseYmd_(it.due_date),
-      String(it.priority || 'Medium'),
-      old.status || 'Open',
+      String(it.priority || PRIORITY[1]),
+      old.status || ITEM_STATUS[0],
       // หมายเหตุมาจากฟอร์มแล้ว ถ้าฟอร์มไม่ได้ส่งมาค่อยใช้ของเดิมในชีต
       it.note === undefined ? (old.note || '') : String(it.note || '')
-    ]);
+    ];
   });
 
-  var last = sh.getLastRow();
-  if (last > 1) sh.getRange(2, 1, last - 1, headers.length).clearContent();
-  if (rows.length) sh.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  if (rows.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+  }
+  deleteRowsDesc_(sh, mine.map(function (it) { return it._row; }));
+}
+
+/**
+ * ลบแถวตามเลขที่ระบุ โดยไล่จากล่างขึ้นบนเพื่อไม่ให้เลขแถวที่เหลือขยับระหว่างลบ
+ * และรวบแถวที่ติดกันให้ลบทีเดียว จะได้ไม่เรียก API ทีละแถว
+ */
+function deleteRowsDesc_(sh, rowNumbers) {
+  var rows = (rowNumbers || []).slice().sort(function (a, b) { return b - a; });
+  var i = 0;
+  while (i < rows.length) {
+    var end = rows[i];      // แถวล่างสุดของช่วงนี้
+    var count = 1;
+    while (i + count < rows.length && rows[i + count] === end - count) count++;
+    sh.deleteRows(end - count + 1, count);
+    i += count;
+  }
 }
