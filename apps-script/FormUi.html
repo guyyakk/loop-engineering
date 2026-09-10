@@ -187,6 +187,8 @@
 
 <script>
 var PEOPLE = [], MEETING_ID = '', DIRTY = false;
+var MEETING_UPDATED_AT = '';  // เวลาที่บันทึกล่าสุดของประชุมที่เปิดอยู่ ใช้กันเขียนทับกัน
+var FORCE_SAVE = false;       // true เมื่อผู้ใช้ยืนยันว่าจะบันทึกทับทั้งที่ข้อมูลชนกัน
 
 function el(id) { return document.getElementById(id); }
 function show(kind, text) {
@@ -377,6 +379,8 @@ function collect() {
 
   return {
     meeting_id: MEETING_ID,
+    updated_at: MEETING_UPDATED_AT,
+    force: FORCE_SAVE,
     title: el('title').value.trim(),
     date: el('date').value,
     start_time: el('start_time').value,
@@ -396,6 +400,59 @@ function collect() {
 function busy(on) {
   el('bSave').disabled = on;
   el('bDone').disabled = on;
+}
+
+/**
+ * จัดการ error จากฝั่งเซิร์ฟเวอร์
+ * ถ้าเป็นการชนกันของข้อมูล (มีคนบันทึกคั่นระหว่างที่เราเปิดฟอร์มค้างไว้)
+ * ต้องให้คนตัดสินใจเอง ไม่ใช่ทับเงียบ ๆ หรือทิ้งสิ่งที่เพิ่งพิมพ์ไป
+ */
+function handleFailure(e, retryFn) {
+  busy(false);
+  var msg = String((e && e.message) || e);
+  if (msg.indexOf('CONFLICT') === 0) {
+    setStatus('ข้อมูลชนกัน รอการตัดสินใจ');
+    showConfirm(
+      '⚠ <b>ข้อมูลชนกัน</b><br>' + escAttr(msg.replace('CONFLICT:', '').trim()) +
+      '<br><br>กดยืนยัน = บันทึกทับด้วยข้อมูลในหน้านี้' +
+      '<br>กดยกเลิก = ไม่บันทึก (เปิดลิงก์ใหม่อีกแท็บเพื่อดูข้อมูลล่าสุดก่อนได้)',
+      function () { FORCE_SAVE = true; retryFn(); });
+    return;
+  }
+  setStatus('ไม่สำเร็จ');
+  show('err', 'เกิดข้อผิดพลาด: ' + msg);
+}
+
+/** จำเวลาที่บันทึกล่าสุดของประชุมนี้ไว้ เพื่อให้เซิร์ฟเวอร์ตรวจได้ว่าข้อมูลในมือยังใหม่ไหม */
+function afterSave(res) {
+  if (res && res.updated_at !== undefined) MEETING_UPDATED_AT = res.updated_at;
+  FORCE_SAVE = false;
+}
+
+/**
+ * บันทึกร่างระหว่างประชุม โดยไม่ส่งอะไรออกไปข้างนอก
+ * (ฟังก์ชันนี้เคยหายไปตอนรีแฟกเตอร์แผงยืนยัน ทำให้ปุ่มบันทึกร่างตายอยู่หลายเวอร์ชัน
+ *  ตอนนี้ tools/verify.js ตรวจแล้วว่าทุกปุ่มมีฟังก์ชันรองรับจริง)
+ */
+function save(check) {
+  busy(true);
+  setStatus('กำลังบันทึก…');
+  google.script.run
+    .withSuccessHandler(function (res) {
+      busy(false);
+      afterSave(res);
+      MEETING_ID = res.meeting_id;
+      el('mid').textContent = res.meeting_id;
+      DIRTY = false;
+      setStatus('บันทึกล่าสุด ' + res.saved_at);
+      if (check && res.errors.length) {
+        show('err', 'ยังมีจุดที่ต้องแก้\n\n• ' + res.errors.join('\n• '));
+      } else {
+        show('ok', 'บันทึกแล้ว ' + res.item_count + ' งาน');
+      }
+    })
+    .withFailureHandler(function (e) { handleFailure(e, function () { save(check); }); })
+    .formSave(collect(), check);
 }
 
 /* ---- แผงยืนยัน ----
@@ -439,6 +496,7 @@ function finish() {
   google.script.run
     .withSuccessHandler(function (pv) {
       busy(false);
+      afterSave(pv);
       if (pv.errors.length) {
         setStatus('ยังส่งไม่ได้');
         show('err', 'ยังปิดประชุมไม่ได้ ต้องแก้ก่อน\n\n• ' + pv.errors.join('\n• '));
@@ -450,23 +508,21 @@ function finish() {
         ? '🧪 <b>โหมดทดสอบ</b> จะยังไม่มีอีเมลออกจริง'
         : '📧 <b>โหมดส่งจริง</b> อีเมลจะถูกส่งทันทีที่กดยืนยัน');
       h.push('งานทั้งหมด <b>' + pv.item_count + '</b> รายการ');
-      h.push('ผู้รับ <b>' + pv.to.length + '</b> คน: ' + (pv.to.join(', ') || '(ไม่มี)'));
-      if (pv.cc.length) h.push('สำเนา: ' + pv.cc.join(', '));
+      h.push('ผู้รับ <b>' + pv.to.length + '</b> คน: ' +
+        (pv.to.map(escAttr).join(', ') || '(ไม่มี)'));
+      if (pv.cc.length) h.push('สำเนา: ' + pv.cc.map(escAttr).join(', '));
       if (pv.already_sent) {
-        h.push('ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + pv.sent_at + ' จะไม่ส่งซ้ำ แต่จะสร้างรูปใหม่ให้');
+        h.push('ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + escAttr(pv.sent_at) +
+               ' จะไม่ส่งซ้ำ แต่จะสร้างรูปใหม่ให้');
       }
       if (pv.warnings.length) {
         h.push('<b>ข้อควรระวัง</b>');
-        h.push('• ' + pv.warnings.join('<br>• '));
+        h.push('• ' + pv.warnings.map(escAttr).join('<br>• '));
       }
       showConfirm(h.join('<br>'), doSend);
       setStatus('รอการยืนยัน');
     })
-    .withFailureHandler(function (e) {
-      busy(false);
-      setStatus('ตรวจไม่สำเร็จ');
-      show('err', 'เกิดข้อผิดพลาด: ' + e.message);
-    })
+    .withFailureHandler(function (e) { handleFailure(e, finish); })
     .webPreview(collect());
 }
 
@@ -475,17 +531,14 @@ function doSend() {
   setStatus('กำลังส่งและสร้างรูป… อาจใช้เวลาสัก 10–20 วินาที');
   google.script.run
     .withSuccessHandler(showResult)
-    .withFailureHandler(function (e) {
-      busy(false);
-      setStatus('ไม่สำเร็จ');
-      show('err', 'เกิดข้อผิดพลาด: ' + e.message);
-    })
+    .withFailureHandler(function (e) { handleFailure(e, doSend); })
     .webFinish(collect());
 }
 
 function showResult(r) {
   busy(false);
   DIRTY = false;
+  afterSave(r);
   if (!r.ok) {
     setStatus('ยังส่งไม่ได้');
     show('err', 'ยังปิดประชุมไม่ได้\n\n• ' + r.errors.join('\n• '));
@@ -496,32 +549,36 @@ function showResult(r) {
   show('', '');
   setStatus('ปิดประชุมแล้ว ' + r.meeting_id);
 
+  // ทุกค่าที่มาจากชีตต้อง escape ก่อนต่อเข้า HTML เพราะเป็นข้อความที่คนกรอกเองได้
   var email;
   if (r.already_sent) {
-    email = '📧 ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + r.sent_at + ' ระบบไม่ส่งซ้ำ';
+    email = '📧 ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + escAttr(r.sent_at) + ' ระบบไม่ส่งซ้ำ';
   } else if (r.email_error) {
-    email = '⚠ ส่งอีเมลไม่สำเร็จ: ' + r.email_error + ' (รูปและข้อความด้านล่างยังใช้ได้ตามปกติ)';
+    email = '⚠ ส่งอีเมลไม่สำเร็จ: ' + escAttr(r.email_error) +
+            ' (รูปและข้อความด้านล่างยังใช้ได้ตามปกติ)';
   } else if (r.email_skipped === 'no_recipients') {
     email = '⚠ <b>ข้ามการส่งอีเมล</b> เพราะยังไม่มีผู้รับ — ไปกรอกคอลัมน์ email ในชีต people ก่อน';
   } else if (r.dry_run) {
-    email = '🧪 <b>โหมดทดสอบ</b> ไม่มีอีเมลออกจริง (ผู้รับที่จะได้รับ ' + r.recipients + ' คน)';
+    email = '🧪 <b>โหมดทดสอบ</b> ไม่มีอีเมลออกจริง (ผู้รับที่จะได้รับ ' + Number(r.recipients) + ' คน)';
   } else {
-    email = '📧 ส่งอีเมลแล้ว ' + r.recipients + ' คน' +
-      (r.personal ? ' และเมลรายบุคคลอีก ' + r.personal + ' ฉบับ' : '') +
-      ' · โควตาคงเหลือวันนี้ ' + r.quota_left;
+    email = '📧 ส่งอีเมลแล้ว ' + Number(r.recipients) + ' คน' +
+      (r.personal ? ' และเมลรายบุคคลอีก ' + Number(r.personal) + ' ฉบับ' : '') +
+      ' · โควตาคงเหลือวันนี้ ' + Number(r.quota_left);
   }
   el('rEmail').innerHTML = email;
 
   if (r.image_data || r.image_url) {
     var img = r.image_data
-      ? '<img class="shot" src="' + r.image_data + '" alt="' + (r.image_name || 'สรุปประชุม') + '">'
+      ? '<img class="shot" src="' + escAttr(r.image_data) + '" alt="' +
+        escAttr(r.image_name || 'สรุปประชุม') + '">'
       : '';
     el('rImage').innerHTML = img +
       '<div class="hint" style="margin-top:6px">มือถือ: กดค้างที่รูป → บันทึกรูปภาพ · คอม: คลิกขวา → Save image as' +
-      (r.image_url ? ' · <a href="' + r.image_url + '" target="_blank" rel="noopener">เปิดใน Drive</a>' : '') +
-      ' · ' + (r.image_name || '') + '</div>';
+      (r.image_url ? ' · <a href="' + escAttr(r.image_url) +
+        '" target="_blank" rel="noopener">เปิดใน Drive</a>' : '') +
+      ' · ' + escAttr(r.image_name || '') + '</div>';
   } else {
-    el('rImage').innerHTML = '⚠ สร้างรูปไม่สำเร็จ: ' + (r.image_error || 'ไม่ทราบสาเหตุ') +
+    el('rImage').innerHTML = '⚠ สร้างรูปไม่สำเร็จ: ' + escAttr(r.image_error || 'ไม่ทราบสาเหตุ') +
       ' — ใช้ข้อความข้างล่างแทนได้';
   }
 
@@ -709,6 +766,8 @@ function init(data) {
 
   PEOPLE = data.people;
   MEETING_ID = data.meeting.meeting_id || '';
+  MEETING_UPDATED_AT = data.meeting.updated_at || '';
+  FORCE_SAVE = false;
   el('mid').textContent = MEETING_ID;
 
   el('chair').innerHTML = personOptions(data.meeting.chair);

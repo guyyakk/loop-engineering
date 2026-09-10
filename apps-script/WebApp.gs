@@ -141,12 +141,9 @@ function webFinish(p) {
  */
 function webStartNew() {
   return withDocumentLock_(function () {
-    var sh = sheet_(SHEET.MEETINGS);
-    var headers = HEADERS[SHEET.MEETINGS];
-    var vals = { meeting_id: nextMeetingId_(), date: new Date(), status: STATUS.DRAFT };
-    sh.getRange(sh.getLastRow() + 1, 1, 1, headers.length).setValues([headers.map(function (h) {
-      return vals[h] === undefined ? '' : vals[h];
-    })]);
+    appendRowsByHeader_(SHEET.MEETINGS, [
+      { meeting_id: nextMeetingId_(), date: new Date(), status: STATUS.DRAFT }
+    ]);
     return formInit(); // ร่างล่าสุดคือแถวที่เพิ่งสร้าง
   });
 }
@@ -175,8 +172,6 @@ function webAddPerson(p) {
   var dept = String((p && p.department) || '').trim();
 
   return withDocumentLock_(function () {
-    var sh = sheet_(SHEET.PEOPLE);
-    var headers = HEADERS[SHEET.PEOPLE];
     var found = readTable_(SHEET.PEOPLE).filter(function (r) {
       return String(r.name || '').trim().toLowerCase() === name.toLowerCase();
     })[0];
@@ -193,10 +188,9 @@ function webAddPerson(p) {
       if (email && !String(found.email || '').trim()) setCell_(SHEET.PEOPLE, found._row, 'email', email);
       if (dept && !String(found.department || '').trim()) setCell_(SHEET.PEOPLE, found._row, 'department', dept);
     } else {
-      var vals = { name: name, email: email, department: dept, active: 'yes' };
-      sh.getRange(sh.getLastRow() + 1, 1, 1, headers.length).setValues([headers.map(function (h) {
-        return vals[h] === undefined ? '' : vals[h];
-      })]);
+      appendRowsByHeader_(SHEET.PEOPLE, [
+        { name: name, email: email, department: dept, active: 'yes' }
+      ]);
     }
 
     return { status: status, name: name, has_email: !!email, people: peopleList_() };

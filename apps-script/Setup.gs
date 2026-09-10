@@ -10,7 +10,7 @@
 var HEADERS = {};
 HEADERS[SHEET.MEETINGS] = ['meeting_id', 'title', 'date', 'start_time', 'end_time', 'location',
   'chair', 'note_taker', 'attendees', 'absentees', 'decisions', 'open_issues',
-  'next_meeting_at', 'status', 'sent_at', 'image_url', 'agenda'];
+  'next_meeting_at', 'status', 'sent_at', 'image_url', 'agenda', 'updated_at'];
 HEADERS[SHEET.ITEMS] = ['item_id', 'meeting_id', 'task', 'owner', 'due_date', 'priority', 'status', 'note'];
 HEADERS[SHEET.PEOPLE] = ['name', 'email', 'department', 'active'];
 
@@ -108,6 +108,7 @@ HEADER_NOTES[SHEET.MEETINGS] = {
   open_issues: 'ประเด็นค้างที่ยังไม่มีเจ้าภาพ บรรทัดละ 1 ข้อ',
   next_meeting_at: 'วันเวลาประชุมครั้งถัดไป',
   agenda: 'วาระการประชุม บรรทัดละ 1 วาระ',
+  updated_at: 'เวลาที่บันทึกล่าสุด ระบบเขียนให้เอง ใช้กันสองแท็บบันทึกทับกัน ห้ามแก้',
   status: 'draft = ยังไม่ส่ง / sent = ส่งอีเมลแล้ว ระบบเขียนให้เอง',
   sent_at: 'เวลาที่ส่งอีเมลสำเร็จ ระบบเขียนให้เอง ล้างช่องนี้ถ้าต้องการส่งซ้ำ',
   image_url: 'ลิงก์รูปสรุปล่าสุด ระบบเขียนให้เอง'

@@ -46,6 +46,21 @@ step('คอมไพล์ JavaScript ใน FormUi.html', () => {
   return blocks.length + ' บล็อก';
 });
 
+step('ปุ่มในฟอร์มมีฟังก์ชันรองรับครบ', () => {
+  // เคยพลาดมาแล้ว: รีแฟกเตอร์แล้วลบฟังก์ชันทิ้ง แต่ปุ่มยังเรียกอยู่ กดแล้วเงียบไปเฉย ๆ
+  // การคอมไพล์จับไม่ได้ เพราะ onclick เป็นสตริงที่ผูกตอนรันเท่านั้น
+  const html = fs.readFileSync(path.join(ROOT, 'FormUi.html'), 'utf8');
+  const handlers = [];
+  const re = /on(?:click|change|input)="([A-Za-z_$][\w$]*)\s*\(/g;
+  let m;
+  while ((m = re.exec(html))) if (handlers.indexOf(m[1]) === -1) handlers.push(m[1]);
+  if (!handlers.length) throw new Error('ไม่พบ handler ในฟอร์มเลย ผิดปกติ');
+
+  const missing = handlers.filter((fn) => !new RegExp('function\\s+' + fn + '\\s*\\(').test(html));
+  if (missing.length) throw new Error('ปุ่มเรียกฟังก์ชันที่ไม่มีอยู่จริง: ' + missing.join(', '));
+  return handlers.length + ' ปุ่ม';
+});
+
 function runTest(file) {
   const out = execFileSync(process.execPath, [path.join(ROOT, 'tests', file)], { encoding: 'utf8' });
   const last = out.trim().split('\n').pop().trim();

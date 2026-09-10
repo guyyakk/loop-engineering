@@ -18,7 +18,7 @@ const FILES = ['Config.gs', 'Setup.gs', 'Data.gs', 'Render.gs', 'Form.gs', 'Imag
 
 const MEET_HEADERS = ['meeting_id', 'title', 'date', 'start_time', 'end_time', 'location',
   'chair', 'note_taker', 'attendees', 'absentees', 'decisions', 'open_issues',
-  'next_meeting_at', 'status', 'sent_at', 'image_url', 'agenda'];
+  'next_meeting_at', 'status', 'sent_at', 'image_url', 'agenda', 'updated_at'];
 const ITEM_HEADERS = ['item_id', 'meeting_id', 'task', 'owner', 'due_date', 'priority', 'status', 'note'];
 
 let lockHeld = false;
@@ -350,6 +350,111 @@ suite('testAddPersonValidation', function () {
   check('กันชื่อว่าง / ใส่หลายคนในครั้งเดียว / อีเมลผิดรูปแบบ',
     !!blank && !!multi && !!badEmail && dumpSheet(ss, 'people').length === 3,
     JSON.stringify([blank, multi, badEmail]));
+});
+
+/* ---------------------------------------------------- 6. เขียนอิงชื่อคอลัมน์ ไม่ใช่ตำแหน่ง */
+
+suite('testWritesFollowSheetColumnOrder', function () {
+  // จำลองว่ามีคนลากสลับคอลัมน์ในชีต: เอา status กับ title ไปไว้หน้าสุด
+  const shuffled = ['status', 'title'].concat(
+    MEET_HEADERS.filter((h) => h !== 'status' && h !== 'title'));
+  const ss = new FakeSpreadsheet();
+  seedSheet(ss, 'meetings', [shuffled]);
+  seedSheet(ss, 'action_items', [ITEM_HEADERS]);
+  seedSheet(ss, 'people', [['name', 'email', 'department', 'active']]);
+  const sb = makeSandbox(ss);
+
+  sb.upsertMeeting_({ meeting_id: '', title: 'ชื่อประชุมต้องลงช่องชื่อ', date: '2026-09-10' });
+
+  const rows = dumpSheet(ss, 'meetings');
+  const idx = {};
+  rows[0].forEach((h, i) => { idx[h] = i; });
+  check('สลับคอลัมน์ในชีตแล้ว การเขียนต้องยังลงถูกช่อง',
+    rows[1][idx.title] === 'ชื่อประชุมต้องลงช่องชื่อ' &&
+    rows[1][idx.status] === 'draft' &&
+    String(rows[1][idx.meeting_id]).indexOf('MOM-') === 0,
+    JSON.stringify([rows[1][idx.title], rows[1][idx.status], rows[1][idx.meeting_id]]));
+});
+
+suite('testTrailingColumnAutoAdded', function () {
+  // ชีตเวอร์ชันเก่าที่ยังไม่มี updated_at — ผู้ใช้ที่ใช้เฉพาะ Web App สั่งเมนูในชีตไม่ได้
+  // ระบบจึงต้องเติมคอลัมน์ท้ายตารางให้เองแทนที่จะปฏิเสธจนใช้งานไม่ได้
+  const ss = new FakeSpreadsheet();
+  const oldHeaders = MEET_HEADERS.slice(0, MEET_HEADERS.length - 1);
+  seedSheet(ss, 'meetings', [oldHeaders, meetingRow('MOM-2026-001', 'ของเดิม', 'draft').slice(0, oldHeaders.length)]);
+  seedSheet(ss, 'action_items', [ITEM_HEADERS]);
+  seedSheet(ss, 'people', [['name', 'email', 'department', 'active']]);
+  const sb = makeSandbox(ss);
+
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'บันทึกได้เลย', date: '2026-09-10' });
+  const rows = dumpSheet(ss, 'meetings');
+  check('ชีตเก่าที่ขาดคอลัมน์ท้ายตาราง -> เติมให้เองแล้วบันทึกต่อได้',
+    rows[0][rows[0].length - 1] === 'updated_at' && rows[1][1] === 'บันทึกได้เลย',
+    JSON.stringify(rows[0].slice(-2)));
+});
+
+suite('testMissingColumnIsRefused', function () {
+  const ss = new FakeSpreadsheet();
+  seedSheet(ss, 'meetings', [MEET_HEADERS.filter((h) => h !== 'status')]); // ขาดคอลัมน์สำคัญ
+  seedSheet(ss, 'action_items', [ITEM_HEADERS]);
+  seedSheet(ss, 'people', [['name', 'email', 'department', 'active']]);
+  const sb = makeSandbox(ss);
+  let msg = null;
+  try {
+    sb.upsertMeeting_({ meeting_id: '', title: 'x', date: '2026-09-10' });
+  } catch (e) { msg = e.message; }
+  check('ชีตขาดคอลัมน์ที่ระบบต้องใช้ -> ปฏิเสธพร้อมบอกชื่อคอลัมน์ ไม่เขียนมั่ว',
+    !!msg && msg.indexOf('status') > -1 && dumpSheet(ss, 'meetings').length === 1, msg);
+});
+
+/* ---------------------------------------------------- 7. กันสองแท็บเขียนทับกัน */
+
+suite('testConcurrentOverwriteIsBlocked', function () {
+  const ss = freshSheet([meetingRow('MOM-2026-001', 'ร่าง', 'draft')]);
+  const sb = makeSandbox(ss);
+
+  // แท็บ A และ B เปิดฟอร์มพร้อมกัน ได้ updated_at ชุดเดียวกัน
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'ตั้งต้น', date: '2026-09-10' });
+  const loaded = sb.formInit().meeting.updated_at;
+
+  // แท็บ A บันทึกก่อน
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'A บันทึกแล้ว', date: '2026-09-10',
+                      updated_at: loaded });
+
+  // แท็บ B ถือ updated_at เก่ามาบันทึกทับ
+  let conflict = null;
+  try {
+    sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'B ทับ', date: '2026-09-10',
+                        updated_at: loaded });
+  } catch (e) { conflict = e.message; }
+
+  const title = dumpSheet(ss, 'meetings')[1][1];
+  check('แท็บที่ถือข้อมูลเก่ามาบันทึกทับ -> ถูกปฏิเสธ และของเดิมไม่ถูกแตะ',
+    !!conflict && conflict.indexOf('CONFLICT') === 0 && title === 'A บันทึกแล้ว',
+    JSON.stringify([conflict, title]));
+});
+
+suite('testForceOverwriteWhenUserChooses', function () {
+  const ss = freshSheet([meetingRow('MOM-2026-001', 'ร่าง', 'draft')]);
+  const sb = makeSandbox(ss);
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'ตั้งต้น', date: '2026-09-10' });
+  const stale = sb.formInit().meeting.updated_at;
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'คนอื่นบันทึก', date: '2026-09-10', updated_at: stale });
+
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'ยืนยันทับ', date: '2026-09-10',
+                      updated_at: stale, force: true });
+  check('ถ้าผู้ใช้ยืนยันว่าจะทับ (force) ต้องบันทึกได้',
+    dumpSheet(ss, 'meetings')[1][1] === 'ยืนยันทับ', dumpSheet(ss, 'meetings')[1][1]);
+});
+
+suite('testNoStampMeansNoCheck', function () {
+  const ss = freshSheet([meetingRow('MOM-2026-001', 'ร่าง', 'draft')]);
+  const sb = makeSandbox(ss);
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'บันทึกครั้งแรก', date: '2026-09-10' });
+  // ฟอร์มเวอร์ชันเก่าที่ไม่ได้ส่ง updated_at มาเลย ต้องยังบันทึกได้ (ไม่ทำให้ของเดิมพัง)
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'ฟอร์มเก่า', date: '2026-09-10' });
+  check('ฟอร์มที่ไม่ได้ส่ง updated_at มา ยังบันทึกได้ตามปกติ',
+    dumpSheet(ss, 'meetings')[1][1] === 'ฟอร์มเก่า', dumpSheet(ss, 'meetings')[1][1]);
 });
 
 /* ---------------------------------------------------- สรุปผล */

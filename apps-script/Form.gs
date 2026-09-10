@@ -30,6 +30,32 @@ function ymdhm_(v) {
   return d ? Utilities.formatDate(d, tz_(), "yyyy-MM-dd'T'HH:mm") : '';
 }
 
+/**
+ * เวลาที่บันทึกล่าสุด เก็บเป็น "ข้อความ" ไม่ใช่ Date
+ * เพราะถ้าเก็บเป็น Date ชีตอาจปัดเศษมิลลิวินาที ทำให้ค่าที่อ่านกลับมาไม่ตรงกับที่เขียนไป
+ * แล้วระบบจะฟ้องว่าชนกันทั้งที่ไม่ได้ชน
+ */
+function stamp_(v) {
+  if (isDate_(v)) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm:ss.SSS');
+  return String(v === null || v === undefined ? '' : v).trim();
+}
+
+/**
+ * สร้าง stamp ใหม่ที่ "ต่างจากของเดิมเสมอ"
+ * การบันทึกสองครั้งติดกันในมิลลิวินาทีเดียวอาจได้ค่าเท่ากัน ซึ่งจะทำให้ตรวจการชนไม่เจอ
+ */
+function nextStamp_(prevStamp) {
+  var now = new Date();
+  var out = stamp_(now);
+  var guard = 0;
+  while (out === String(prevStamp || '') && guard < 1000) {
+    now = new Date(now.getTime() + 1);
+    out = stamp_(now);
+    guard++;
+  }
+  return out;
+}
+
 /** 'YYYY-MM-DD' -> Date (สร้างจากตัวเลขตรง ๆ กันเพี้ยนเรื่อง timezone) */
 function parseYmd_(s) {
   var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '').trim());
@@ -69,7 +95,7 @@ function formInit() {
       people: people,
       meeting: { meeting_id: '', title: '', date: ymd_(new Date()), start_time: '', end_time: '',
                  location: '', chair: '', note_taker: '', attendees: [], agenda: '', decisions: '',
-                 open_issues: '', next_meeting_at: '', sent: false },
+                 open_issues: '', next_meeting_at: '', updated_at: '', sent: false },
       items: []
     };
   }
@@ -100,6 +126,7 @@ function formInit() {
       decisions: String(m.decisions || ''),
       open_issues: String(m.open_issues || ''),
       next_meeting_at: ymdhm_(m.next_meeting_at),
+      updated_at: stamp_(m.updated_at),
       sent: String(m.status || '').toLowerCase() === STATUS.SENT
     },
     items: items
@@ -146,6 +173,7 @@ function formSaveCore_(p, check) {
 
   var out = {
     meeting_id: res.id,
+    updated_at: res.updated_at,
     saved_at: Utilities.formatDate(new Date(), tz_(), 'HH:mm:ss'),
     item_count: (p.items || []).length,
     errors: [],
@@ -206,7 +234,6 @@ function nextMeetingId_() {
 /** เขียนแถวประชุม — เก็บค่าที่ฟอร์มไม่ได้แก้ (status, sent_at, image_url, absentees) ไว้เหมือนเดิม */
 function upsertMeeting_(p) {
   var sh = sheet_(SHEET.MEETINGS);
-  var headers = HEADERS[SHEET.MEETINGS];
   var rows = readTable_(SHEET.MEETINGS);
   var target = null;
   if (p.meeting_id) {
@@ -226,6 +253,17 @@ function upsertMeeting_(p) {
   var base = target || {};
   var id = target ? String(target.meeting_id) : (p.meeting_id || nextMeetingId_());
 
+  // กันสองแท็บ/สองคนเขียนทับกัน: ฟอร์มถือเวลาที่บันทึกล่าสุดตอนโหลดมาด้วย
+  // ถ้าในชีตเปลี่ยนไปแล้วแปลว่ามีคนบันทึกคั่น การเขียนทับจะทำให้งานของอีกฝั่งหายทั้งชุด
+  // (ล็อกกันได้แค่การเขียนพร้อมกันเป๊ะ ๆ กันเคสนี้ไม่ได้)
+  if (target && p.updated_at !== undefined && !p.force) {
+    var current = stamp_(target.updated_at);
+    if (current !== String(p.updated_at || '')) {
+      throw new Error('CONFLICT: มีการบันทึกประชุมนี้จากที่อื่นหลังจากคุณเปิดฟอร์ม ' +
+                      'ถ้าบันทึกทับ งานที่อีกฝั่งเพิ่งใส่ไว้จะหาย');
+    }
+  }
+
   var vals = {
     meeting_id: id,
     title: String(p.title || '').trim(),
@@ -243,14 +281,13 @@ function upsertMeeting_(p) {
     next_meeting_at: parseYmdHm_(p.next_meeting_at),
     status: base.status || STATUS.DRAFT,
     sent_at: base.sent_at || '',
-    image_url: base.image_url || ''
+    image_url: base.image_url || '',
+    updated_at: nextStamp_(stamp_(base.updated_at))
   };
 
   var row = target ? target._row : sh.getLastRow() + 1;
-  sh.getRange(row, 1, 1, headers.length).setValues([headers.map(function (h) {
-    return vals[h] === undefined ? '' : vals[h];
-  })]);
-  return { row: row, id: id };
+  writeRowByHeader_(SHEET.MEETINGS, row, vals);
+  return { row: row, id: id, updated_at: vals.updated_at };
 }
 
 /**
@@ -266,7 +303,6 @@ function upsertMeeting_(p) {
  */
 function replaceItems_(meetingId, items) {
   var sh = sheet_(SHEET.ITEMS);
-  var headers = HEADERS[SHEET.ITEMS];
   var mine = readTable_(SHEET.ITEMS).filter(function (it) {
     return String(it.meeting_id || '').trim() === String(meetingId).trim();
   });
@@ -281,22 +317,20 @@ function replaceItems_(meetingId, items) {
 
   var rows = (items || []).map(function (it, i) {
     var old = keep[String(it.task || '').trim() + '|' + String(it.owner || '').trim()] || {};
-    return [
-      meetingId + '-A' + (i + 1),
-      meetingId,
-      String(it.task || '').trim(),
-      String(it.owner || ''),
-      parseYmd_(it.due_date),
-      String(it.priority || PRIORITY[1]),
-      old.status || ITEM_STATUS[0],
+    return {
+      item_id: meetingId + '-A' + (i + 1),
+      meeting_id: meetingId,
+      task: String(it.task || '').trim(),
+      owner: String(it.owner || ''),
+      due_date: parseYmd_(it.due_date),
+      priority: String(it.priority || PRIORITY[1]),
+      status: old.status || ITEM_STATUS[0],
       // หมายเหตุมาจากฟอร์มแล้ว ถ้าฟอร์มไม่ได้ส่งมาค่อยใช้ของเดิมในชีต
-      it.note === undefined ? (old.note || '') : String(it.note || '')
-    ];
+      note: it.note === undefined ? (old.note || '') : String(it.note || '')
+    };
   });
 
-  if (rows.length) {
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
-  }
+  appendRowsByHeader_(SHEET.ITEMS, rows);
   deleteRowsDesc_(sh, mine.map(function (it) { return it._row; }));
 }
 

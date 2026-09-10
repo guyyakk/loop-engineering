@@ -65,6 +65,80 @@ function setCell_(name, row, header, value) {
   sheet_(name).getRange(row, colIndex_(name, header)).setValue(value);
 }
 
+/* --------------------------------------------- เขียนชีตโดยอิงชื่อคอลัมน์ ---------------
+ * เดิมการเขียนยัดค่าลงคอลัมน์ที่ 1..N ตามลำดับใน HEADERS ขณะที่การอ่านจับคู่ด้วยชื่อ
+ * ถ้ามีใครสลับคอลัมน์ในชีตสักครั้ง การอ่านจะยังถูก แต่การเขียนจะลงผิดช่องแบบเงียบ ๆ
+ * ทุกการเขียนจึงต้องผ่านฟังก์ชันด้านล่างนี้ ซึ่งอิงลำดับจริงของหัวตารางในชีต
+ */
+
+var HEADER_CACHE = {}; // ต่อหนึ่งการรันเท่านั้น Apps Script เริ่มใหม่ทุก request อยู่แล้ว
+
+/** ลำดับหัวตารางจริงในชีต พร้อมตรวจว่าคอลัมน์ที่ระบบต้องใช้มีครบ */
+function sheetHeaders_(name) {
+  if (HEADER_CACHE[name]) return HEADER_CACHE[name];
+  var sh = sheet_(name);
+  var width = Math.max(sh.getLastColumn(), 1);
+  var headers = sh.getRange(1, 1, 1, width).getValues()[0].map(function (h) { return String(h).trim(); });
+
+  var required = HEADERS[name] || [];
+  var missing = required.filter(function (h) { return headers.indexOf(h) === -1; });
+
+  if (missing.length) {
+    // ชีตเวอร์ชันเก่าที่ยังไม่มีคอลัมน์ใหม่ต่อท้าย: เติมให้เองเลย
+    // เพราะผู้ใช้ที่ใช้เฉพาะ Web App ไปสั่งเมนูในชีตไม่ได้ ถ้าไม่เติมให้ระบบจะใช้ไม่ได้ทั้งใบ
+    var filled = headers.filter(function (h) { return h !== ''; });
+    var isOlderVersion = required.slice(0, filled.length).join('|') === filled.join('|');
+    if (isOlderVersion) {
+      var add = required.slice(filled.length);
+      sh.getRange(1, filled.length + 1, 1, add.length).setValues([add]);
+      Logger.log('เติมคอลัมน์ใหม่ให้ชีต %s: %s', name, add.join(', '));
+      headers = filled.concat(add);
+    } else {
+      // หัวตารางผิดรูปแบบจริง ๆ (เช่นมีคนลบคอลัมน์กลางตาราง) อันนี้เดาแทนไม่ได้
+      throw new Error('ชีต "' + name + '" ไม่มีคอลัมน์ ' + missing.join(', ') +
+                      ' และลำดับหัวตารางไม่ตรงกับที่ระบบรู้จัก ' +
+                      'ให้เปิดชีตแล้วสั่งเมนู MOM → ตั้งค่าเริ่มต้น เพื่อตรวจสอบ');
+    }
+  }
+
+  HEADER_CACHE[name] = headers;
+  return headers;
+}
+
+/**
+ * เขียนหนึ่งแถวโดยระบุค่าเป็น { ชื่อคอลัมน์: ค่า }
+ * คอลัมน์ที่ไม่ได้ระบุจะคงค่าเดิมไว้ จึงไม่ไปล้างคอลัมน์ที่คนอื่นเพิ่มเข้ามาเอง
+ */
+function writeRowByHeader_(name, row, valsByHeader) {
+  var sh = sheet_(name);
+  var headers = sheetHeaders_(name);
+  var width = headers.length;
+  var line = row <= sh.getLastRow()
+    ? sh.getRange(row, 1, 1, width).getValues()[0]
+    : new Array(width).join(',').split(','); // แถวใหม่ = ค่าว่างทั้งแถว
+
+  headers.forEach(function (h, i) {
+    if (h && Object.prototype.hasOwnProperty.call(valsByHeader, h)) line[i] = valsByHeader[h];
+  });
+  sh.getRange(row, 1, 1, width).setValues([line]);
+  return row;
+}
+
+/** ต่อท้ายหลายแถวรวดเดียว โดยจัดค่าตามลำดับหัวตารางจริงของชีต */
+function appendRowsByHeader_(name, list) {
+  if (!list || !list.length) return 0;
+  var sh = sheet_(name);
+  var headers = sheetHeaders_(name);
+  var rows = list.map(function (o) {
+    return headers.map(function (h) {
+      return (h && Object.prototype.hasOwnProperty.call(o, h)) ? o[h] : '';
+    });
+  });
+  var start = sh.getLastRow() + 1;
+  sh.getRange(start, 1, rows.length, headers.length).setValues(rows);
+  return start;
+}
+
 /** ทะเบียนรายชื่อ: ชื่อ -> {email, department} เฉพาะคนที่ active */
 function peopleMap_() {
   var map = {};

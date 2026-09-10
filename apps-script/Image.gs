@@ -14,6 +14,25 @@
 var WANT_W = 420;
 var WANT_H = 700;
 
+/**
+ * ลองใหม่เมื่อ API ภายนอกสะดุด
+ * Slides API และการดาวน์โหลดไฟล์ล้มชั่วคราวได้เป็นปกติ ถ้าไม่ลองซ้ำ ผู้ใช้จะไม่ได้รูป
+ * ทั้งที่รอแป๊บเดียวก็ผ่าน — หน่วงเพิ่มขึ้นทุกครั้งเพื่อไม่ไปกระหน่ำซ้ำตอนระบบปลายทางแย่อยู่
+ */
+function retry_(label, fn) {
+  var lastError;
+  for (var i = 1; i <= 3; i++) {
+    try {
+      return fn();
+    } catch (e) {
+      lastError = e;
+      Logger.log('%s ล้มเหลวครั้งที่ %s: %s', label, i, e.message);
+      if (i < 3) Utilities.sleep(700 * i);
+    }
+  }
+  throw new Error(label + ' ไม่สำเร็จหลังลอง 3 ครั้ง: ' + String(lastError && lastError.message || lastError));
+}
+
 function buildMeetingImage_(meeting, items) {
   var templateId = String(cfg_('SLIDE_TEMPLATE_ID') || '').trim();
   var presId, pres;
@@ -34,13 +53,17 @@ function buildMeetingImage_(meeting, items) {
   pres.saveAndClose();
 
   var pageId = SlidesApp.openById(presId).getSlides()[0].getObjectId();
-  var thumb = Slides.Presentations.Pages.getThumbnail(presId, pageId, {
-    'thumbnailProperties.mimeType': 'PNG',
-    'thumbnailProperties.thumbnailSize': 'LARGE'
+  var thumb = retry_('แปลงสไลด์เป็นรูป', function () {
+    return Slides.Presentations.Pages.getThumbnail(presId, pageId, {
+      'thumbnailProperties.mimeType': 'PNG',
+      'thumbnailProperties.thumbnailSize': 'LARGE'
+    });
   });
 
   var fileName = String(meeting.meeting_id || 'MOM') + '.png';
-  var blob = UrlFetchApp.fetch(thumb.contentUrl).getBlob().setName(fileName);
+  var blob = retry_('ดาวน์โหลดรูป', function () {
+    return UrlFetchApp.fetch(thumb.contentUrl).getBlob();
+  }).setName(fileName);
 
   var folder = imageFolder_();
   // ลบไฟล์ชื่อเดียวกันของประชุมนี้ที่สร้างไว้รอบก่อน กันสับสนว่าอันไหนล่าสุด
