@@ -67,6 +67,7 @@ class FakeSheet {
     this.name = name;
     this.rows = []; // array ของ array เริ่มที่แถว 1 = index 0
     this.writes = []; // เลขแถวที่ถูกเขียน ใช้พิสูจน์ว่าโค้ดแตะเฉพาะแถวที่ควรแตะ
+    this.reads = 0;   // จำนวนครั้งที่อ่านทั้งชีต
   }
   getName() { return this.name; }
   read(row, col) {
@@ -101,6 +102,7 @@ class FakeSheet {
                          numCols === undefined ? 1 : numCols);
   }
   getDataRange() {
+    this.reads++; // นับจำนวนครั้งที่อ่านทั้งชีต ใช้ดูว่า cache ทำงานจริงไหม
     return new FakeRange(this, 1, 1, Math.max(this.getLastRow(), 1), Math.max(this.getLastColumn(), 1));
   }
   deleteRows(start, count) {
@@ -108,6 +110,11 @@ class FakeSheet {
     this.rows.splice(start - 1, count);
   }
   deleteRow(row) { this.deleteRows(row, 1); }
+  appendRow(values) {
+    const row = this.getLastRow() + 1;
+    values.forEach((v, c) => this.write(row, c + 1, v));
+    return this;
+  }
   setFrozenRows() { return this; }
   setColumnWidth() { return this; }
   setConditionalFormatRules() { return this; }

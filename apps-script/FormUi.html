@@ -127,6 +127,7 @@
       · ไม่ใส่อีเมลก็เพิ่มได้ แต่คนนั้นจะไม่ได้รับสรุปทางเมล</div>
   </div>
 
+  <div id="dupWarn" class="hint" style="color:#c92a2a"></div>
   <div class="hint">แยกตามแผนกจากคอลัมน์ department ในชีต people · กดหัวแผนกเพื่อพับ/กาง · กดชื่อเพื่อเลือก</div>
 </div>
 
@@ -713,6 +714,13 @@ function renderMode(ctx) {
   CTX = ctx;
   // แสดงเวอร์ชันที่กำลังรันอยู่ เพื่อตอบคำถาม "refresh แล้วหรือยัง" ได้ทันทีเวลาดีบัก
   el('build').textContent = ctx.build ? 'เวอร์ชัน ' + ctx.build : '';
+
+  // ระบบใช้ "ชื่อ" เป็นตัวระบุตัวตน ถ้ามีชื่อซ้ำกันสองคน งานอาจถูกส่งไปหาผิดคน
+  var dups = ctx.duplicate_names || [];
+  el('dupWarn').textContent = dups.length
+    ? '⚠ ชีต people มีชื่อซ้ำกัน: ' + dups.join(', ') +
+      ' — ระบบแยกไม่ออกว่าเป็นใคร ควรแก้ให้ต่างกัน เช่นเติมแผนกต่อท้ายชื่อ'
+    : '';
   var m = el('mode');
   if (ctx.dry_run) {
     m.className = 'mode test';

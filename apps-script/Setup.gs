@@ -51,6 +51,7 @@ function setupSheets() {
     formatHeader_(sh, expected.length);
   });
 
+  invalidateTable_(); // หัวตาราง/ชีตเพิ่งเปลี่ยน ล้างของที่อ่านค้างไว้ทั้งหมด
   props_().setProperty('SPREADSHEET_ID', ss.getId()); // ให้ Web App หาชีตนี้เจอ
 
   if (created.indexOf(SHEET.PEOPLE) !== -1) seedPeople_();

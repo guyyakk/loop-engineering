@@ -17,6 +17,8 @@ function doGet() {
  * (ผู้ใช้ที่ใช้เฉพาะ Web App จะไม่เห็นเมนูในชีต จึงต้องเห็นข้อมูลพวกนี้ในหน้าเว็บ)
  */
 function webContext() {
+  return guarded_('webContext', function () {
+  assertAllowed_();
   var map = peopleMap_();
   var total = 0, withEmail = 0;
   Object.keys(map).forEach(function (n) {
@@ -29,8 +31,10 @@ function webContext() {
     dry_run: cfgBool_('DRY_RUN'),
     send_individual: cfgBool_('SEND_INDIVIDUAL'),
     people_total: total,
-    people_with_email: withEmail
+    people_with_email: withEmail,
+    duplicate_names: duplicateNames_()
   };
+  });
 }
 
 /**
@@ -39,8 +43,11 @@ function webContext() {
  * จึงให้หน้าเว็บถามยืนยันก่อนเรียกฟังก์ชันนี้เสมอ
  */
 function webSetDryRun(next) {
+  return guarded_('webSetDryRun', function () {
+  assertAllowed_();
   props_().setProperty('DRY_RUN', next ? 'true' : 'false');
   return webContext();
+  });
 }
 
 /**
@@ -48,6 +55,8 @@ function webSetDryRun(next) {
  * ยังไม่ส่งอะไรออกไป เพื่อให้คนได้เห็นรายชื่อผู้รับก่อนกดยืนยัน (human gate)
  */
 function webPreview(p) {
+  return guarded_('webPreview', function () {
+  assertAllowed_();
   var saved = formSave(p, true);
   var meeting = findMeeting_(saved.meeting_id);
   var r = recipientsOf_(meeting);
@@ -67,6 +76,7 @@ function webPreview(p) {
     send_individual: cfgBool_('SEND_INDIVIDUAL'),
     item_count: getItems_(saved.meeting_id).length
   };
+  });
 }
 
 /**
@@ -80,6 +90,8 @@ function webPreview(p) {
  *    ถ้าถือล็อกไว้ตลอด คนอื่นจะกดบันทึกไม่ได้ทั้งที่ไม่จำเป็น
  */
 function webFinish(p) {
+  return guarded_('webFinish', function () {
+  assertAllowed_();
   var prepared = withDocumentLock_(function () {
     var saved = formSaveCore_(p, true);
     if (saved.errors.length) return { ok: false, errors: saved.errors };
@@ -131,6 +143,7 @@ function webFinish(p) {
 
   prepared.line_text = buildLineText_(meeting, items);
   return prepared;
+  });
 }
 
 /**
@@ -140,11 +153,14 @@ function webFinish(p) {
  * ระบบจะถือว่าให้เขียนทับร่างล่าสุด ซึ่งจะไปทับประชุมที่เพิ่งปิดไป
  */
 function webStartNew() {
+  return guarded_('webStartNew', function () {
+  assertAllowed_();
   return withDocumentLock_(function () {
     appendRowsByHeader_(SHEET.MEETINGS, [
       { meeting_id: nextMeetingId_(), date: new Date(), status: STATUS.DRAFT }
     ]);
     return formInit(); // ร่างล่าสุดคือแถวที่เพิ่งสร้าง
+  });
   });
 }
 
@@ -159,6 +175,8 @@ function webStartNew() {
  * และถ้าคนนั้นถูกปิดใช้งานไว้ (active = no) จะเปิดกลับให้
  */
 function webAddPerson(p) {
+  return guarded_('webAddPerson', function () {
+  assertAllowed_();
   var name = String((p && p.name) || '').trim();
   if (!name) throw new Error('ยังไม่ได้พิมพ์ชื่อ');
   if (looksLikeMultipleOwners_(name)) {
@@ -194,6 +212,7 @@ function webAddPerson(p) {
     }
 
     return { status: status, name: name, has_email: !!email, people: peopleList_() };
+  });
   });
 }
 

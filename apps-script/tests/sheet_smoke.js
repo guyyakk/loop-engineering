@@ -14,7 +14,11 @@ const path = require('path');
 const { FakeSpreadsheet, seedSheet, dumpSheet } = require('./fake_sheets');
 
 const DIR = process.argv[2] || path.join(__dirname, '..');
-const FILES = ['Config.gs', 'Setup.gs', 'Data.gs', 'Render.gs', 'Form.gs', 'Image.gs', 'WebApp.gs'];
+const FILES = ['Config.gs', 'Setup.gs', 'Data.gs', 'Log.gs', 'Render.gs', 'Form.gs', 'Image.gs', 'WebApp.gs'];
+
+// ใครกำลังใช้งาน — เทสต์บางชุดสลับค่านี้เพื่อจำลองคนนอก
+let ACTIVE_USER = 'owner@example.com';
+const OWNER_USER = 'owner@example.com';
 
 const MEET_HEADERS = ['meeting_id', 'title', 'date', 'start_time', 'end_time', 'location',
   'chair', 'note_taker', 'attendees', 'absentees', 'decisions', 'open_issues',
@@ -28,7 +32,11 @@ function makeSandbox(ss) {
   const props = {};
   const sandbox = {
     console,
-    Session: { getScriptTimeZone: () => 'Asia/Bangkok' },
+    Session: {
+      getScriptTimeZone: () => 'Asia/Bangkok',
+      getActiveUser: () => ({ getEmail: () => ACTIVE_USER }),
+      getEffectiveUser: () => ({ getEmail: () => OWNER_USER })
+    },
     Logger: { log: () => {} },
     PropertiesService: {
       getScriptProperties: () => ({
@@ -120,6 +128,7 @@ function check(name, pass, detail) {
 function suite(name, fn) {
   try {
     fn();
+    ACTIVE_USER = OWNER_USER;
   } catch (e) {
     lockHeld = false; // กันล็อกค้างไปถึงชุดถัดไป
     check(name + ' (ชุดนี้โยน error)', false, String(e.message || e));
@@ -455,6 +464,100 @@ suite('testNoStampMeansNoCheck', function () {
   sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'ฟอร์มเก่า', date: '2026-09-10' });
   check('ฟอร์มที่ไม่ได้ส่ง updated_at มา ยังบันทึกได้ตามปกติ',
     dumpSheet(ss, 'meetings')[1][1] === 'ฟอร์มเก่า', dumpSheet(ss, 'meetings')[1][1]);
+});
+
+/* ---------------------------------------------------- 8. log, สิทธิ์, ชื่อซ้ำ */
+
+suite('testErrorsAreLogged', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  let thrown = null;
+  try {
+    sb.guarded_('ฟังก์ชันทดสอบ', function () { throw new Error('พังตามที่ตั้งใจ'); });
+  } catch (e) { thrown = e.message; }
+
+  const log = dumpSheet(ss, 'log');
+  check('error ถูกบันทึกลงชีต log และยังโยนต่อให้หน้าเว็บแสดง',
+    thrown === 'พังตามที่ตั้งใจ' && log.length === 2 &&
+    log[1][2] === 'ฟังก์ชันทดสอบ' && String(log[1][3]).indexOf('พังตามที่ตั้งใจ') > -1,
+    JSON.stringify(log[1] && log[1].slice(1)));
+});
+
+suite('testLogFailureDoesNotBreakFlow', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  // ทำให้การเขียน log พังเอง แล้วดูว่า error เดิมยังถูกส่งต่อครบ
+  ss.insertSheet = () => { throw new Error('สร้างชีตไม่ได้'); };
+  let thrown = null;
+  try {
+    sb.guarded_('อีกฟังก์ชัน', function () { throw new Error('error จริงที่ต้องเห็น'); });
+  } catch (e) { thrown = e.message; }
+  check('ถ้าเขียน log ไม่ได้ ต้องไม่กลบ error เดิม',
+    thrown === 'error จริงที่ต้องเห็น', thrown);
+});
+
+suite('testOutsiderIsBlocked', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  ACTIVE_USER = 'stranger@example.com';
+  let blocked = null;
+  try { sb.assertAllowed_(); } catch (e) { blocked = e.message; }
+
+  ACTIVE_USER = 'somchai@example.com'; // อยู่ในชีต people
+  let member = 'ผ่าน';
+  try { sb.assertAllowed_(); } catch (e) { member = e.message; }
+
+  ACTIVE_USER = OWNER_USER; // เจ้าของสคริปต์ ไม่ได้อยู่ใน people ก็ต้องผ่าน
+  let owner = 'ผ่าน';
+  try { sb.assertAllowed_(); } catch (e) { owner = e.message; }
+
+  check('คนนอกถูกปฏิเสธ ส่วนคนในทะเบียนและเจ้าของผ่าน',
+    !!blocked && blocked.indexOf('stranger@example.com') > -1 &&
+    member === 'ผ่าน' && owner === 'ผ่าน',
+    JSON.stringify([blocked, member, owner]));
+});
+
+suite('testDuplicateNamesAreReported', function () {
+  const ss = freshSheet();
+  const sh = ss.getSheetByName('people');
+  sh.appendRow(['สมชาย', 'somchai2@example.com', 'Production', 'yes']); // ชื่อซ้ำคนละคน
+  const sb = makeSandbox(ss);
+  const dups = sb.duplicateNames_();
+  check('ชื่อซ้ำในทะเบียนถูกตรวจเจอ เพื่อเตือนก่อนงานถูกส่งไปผิดคน',
+    dups.length === 1 && dups[0] === 'สมชาย', JSON.stringify(dups));
+});
+
+/* ---------------------------------------------------- 9. cache การอ่านชีต */
+
+suite('testCacheIsInvalidatedAfterWrite', function () {
+  const ss = freshSheet([meetingRow('MOM-2026-001', 'ชื่อเดิม', 'draft')]);
+  const sb = makeSandbox(ss);
+
+  const before = sb.readTable_('meetings')[0].title;
+  sb.upsertMeeting_({ meeting_id: 'MOM-2026-001', title: 'ชื่อใหม่', date: '2026-09-10' });
+  const after = sb.readTable_('meetings')[0].title;
+
+  check('อ่าน -> เขียน -> อ่านใหม่ ต้องได้ค่าล่าสุด (cache ถูกล้างหลังเขียน)',
+    before === 'ชื่อเดิม' && after === 'ชื่อใหม่', before + ' -> ' + after);
+});
+
+suite('testCacheReducesFullSheetReads', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  const meetings = ss.getSheetByName('meetings');
+  const items = ss.getSheetByName('action_items');
+  meetings.reads = 0;
+  items.reads = 0;
+
+  sb.formSave({
+    meeting_id: '', title: 'ประชุมทดสอบ', date: '2026-09-10', note_taker: 'สุดา',
+    attendees: ['สมชาย'], items: [{ task: 'งาน', owner: 'สมชาย', due_date: '2026-09-12' }]
+  }, true);
+
+  // ก่อนมี cache การบันทึกหนึ่งครั้งอ่านทั้งชีตหลายรอบ ตัวเลขนี้กันไม่ให้ย้อนกลับไปแบบเดิม
+  check('บันทึกหนึ่งครั้งอ่านทั้งชีตไม่เกิน 3 รอบต่อชีต',
+    meetings.reads <= 3 && items.reads <= 3,
+    'meetings=' + meetings.reads + ' items=' + items.reads);
 });
 
 /* ---------------------------------------------------- สรุปผล */

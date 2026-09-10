@@ -30,10 +30,29 @@ function sheet_(name) {
 }
 
 /**
+ * cache การอ่านชีต ต่อหนึ่งรอบการทำงานเท่านั้น (Apps Script เริ่มใหม่ทุก request อยู่แล้ว)
+ *
+ * การบันทึกหนึ่งครั้งเดิมอ่านทั้งชีตซ้ำ 5 รอบ และการกดปิดประชุมอ่าน 9 รอบ
+ * ทั้งหมดอยู่ในล็อก ยิ่งข้อมูลเยอะยิ่งถือล็อกนาน
+ * ทุกจุดที่เขียนต้องล้าง cache ด้วย ไม่งั้นจะอ่านค่าเก่าหลังเขียนไปแล้ว
+ */
+var TABLE_CACHE = {};
+
+function invalidateTable_(name) {
+  if (name === undefined) {
+    TABLE_CACHE = {};
+    HEADER_CACHE = {};
+  } else {
+    delete TABLE_CACHE[name];
+  }
+}
+
+/**
  * อ่านทั้งชีตเป็น array ของ object โดยใช้แถวแรกเป็นชื่อคีย์
  * แต่ละ object มี _row = เลขแถวจริงในชีต ไว้ใช้เขียนกลับและอ้างอิงใน error
  */
 function readTable_(name) {
+  if (TABLE_CACHE[name]) return TABLE_CACHE[name];
   var sh = sheet_(name);
   var values = sh.getDataRange().getValues();
   if (values.length < 2) return [];
@@ -48,6 +67,7 @@ function readTable_(name) {
     }
     out.push(obj);
   }
+  TABLE_CACHE[name] = out;
   return out;
 }
 
@@ -63,6 +83,7 @@ function colIndex_(name, header) {
 
 function setCell_(name, row, header, value) {
   sheet_(name).getRange(row, colIndex_(name, header)).setValue(value);
+  invalidateTable_(name);
 }
 
 /* --------------------------------------------- เขียนชีตโดยอิงชื่อคอลัมน์ ---------------
@@ -93,6 +114,7 @@ function sheetHeaders_(name) {
       sh.getRange(1, filled.length + 1, 1, add.length).setValues([add]);
       Logger.log('เติมคอลัมน์ใหม่ให้ชีต %s: %s', name, add.join(', '));
       headers = filled.concat(add);
+      delete TABLE_CACHE[name]; // หัวตารางเปลี่ยน ค่าที่อ่านไว้ก่อนหน้าใช้ไม่ได้แล้ว
     } else {
       // หัวตารางผิดรูปแบบจริง ๆ (เช่นมีคนลบคอลัมน์กลางตาราง) อันนี้เดาแทนไม่ได้
       throw new Error('ชีต "' + name + '" ไม่มีคอลัมน์ ' + missing.join(', ') +
@@ -121,6 +143,7 @@ function writeRowByHeader_(name, row, valsByHeader) {
     if (h && Object.prototype.hasOwnProperty.call(valsByHeader, h)) line[i] = valsByHeader[h];
   });
   sh.getRange(row, 1, 1, width).setValues([line]);
+  invalidateTable_(name);
   return row;
 }
 
@@ -136,7 +159,30 @@ function appendRowsByHeader_(name, list) {
   });
   var start = sh.getLastRow() + 1;
   sh.getRange(start, 1, rows.length, headers.length).setValues(rows);
+  invalidateTable_(name);
   return start;
+}
+
+/**
+ * ชื่อที่ซ้ำกันในทะเบียน
+ * ระบบใช้ "ชื่อ" เป็นตัวระบุตัวตนทั้งในช่องผู้เข้าร่วมและช่องผู้รับผิดชอบ
+ * ถ้ามีคนชื่อเหมือนกันสองคน แถวหลังจะทับแถวแรก และงานจะถูกส่งไปหาผิดคนได้
+ * จึงต้องดักไว้แล้วบอกให้แก้ชื่อให้ต่างกัน (เช่นเติมแผนกต่อท้าย)
+ */
+function duplicateNames_() {
+  var seen = {};
+  var dups = [];
+  readTable_(SHEET.PEOPLE).forEach(function (p) {
+    var name = String(p.name || '').trim();
+    if (!name) return;
+    var key = name.toLowerCase();
+    if (seen[key]) {
+      if (dups.indexOf(name) === -1) dups.push(name);
+    } else {
+      seen[key] = true;
+    }
+  });
+  return dups;
 }
 
 /** ทะเบียนรายชื่อ: ชื่อ -> {email, department} เฉพาะคนที่ active */

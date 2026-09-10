@@ -348,4 +348,5 @@ function deleteRowsDesc_(sh, rowNumbers) {
     sh.deleteRows(end - count + 1, count);
     i += count;
   }
+  if (rows.length) invalidateTable_(sh.getName());
 }
