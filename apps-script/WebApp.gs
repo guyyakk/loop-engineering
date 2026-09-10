@@ -151,6 +151,58 @@ function webStartNew() {
   });
 }
 
+/**
+ * เพิ่มคนใหม่เข้าทะเบียนรายชื่อจากหน้าฟอร์ม (ระหว่างประชุมมีคนมาเพิ่ม)
+ *
+ * ตั้งใจให้บันทึกลงชีต people จริง ไม่ใช่ใส่ชื่อเฉพาะประชุมนี้ เพราะถ้าไม่บันทึก
+ * คนนั้นจะรับงานไม่ได้ (ไม่โผล่ใน dropdown ผู้รับผิดชอบ) และไม่ได้รับอีเมลสรุป
+ * อีเมลกับแผนกไม่บังคับ เพราะระหว่างประชุมมักยังไม่รู้ ค่อยเติมทีหลังในชีตได้
+ *
+ * ถ้าชื่อซ้ำกับที่มีอยู่แล้วจะไม่สร้างแถวใหม่ แต่ถือว่าเลือกคนเดิม
+ * และถ้าคนนั้นถูกปิดใช้งานไว้ (active = no) จะเปิดกลับให้
+ */
+function webAddPerson(p) {
+  var name = String((p && p.name) || '').trim();
+  if (!name) throw new Error('ยังไม่ได้พิมพ์ชื่อ');
+  if (looksLikeMultipleOwners_(name)) {
+    throw new Error('ใส่ได้ทีละคน — ถ้ามีหลายคนให้เพิ่มทีละชื่อ');
+  }
+
+  var email = String((p && p.email) || '').trim();
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new Error('รูปแบบอีเมลไม่ถูกต้อง: ' + email);
+  }
+  var dept = String((p && p.department) || '').trim();
+
+  return withDocumentLock_(function () {
+    var sh = sheet_(SHEET.PEOPLE);
+    var headers = HEADERS[SHEET.PEOPLE];
+    var found = readTable_(SHEET.PEOPLE).filter(function (r) {
+      return String(r.name || '').trim().toLowerCase() === name.toLowerCase();
+    })[0];
+
+    var status = 'added';
+    if (found) {
+      status = 'exists';
+      name = String(found.name).trim(); // ใช้ตัวสะกดเดิมในทะเบียน กันชื่อเพี้ยนกันคนละแถว
+      if (String(found.active || '').trim().toLowerCase() === 'no') {
+        setCell_(SHEET.PEOPLE, found._row, 'active', 'yes');
+        status = 'reactivated';
+      }
+      // เติมเฉพาะช่องที่ยังว่าง จะได้ไม่ไปทับข้อมูลที่คนอื่นกรอกไว้แล้ว
+      if (email && !String(found.email || '').trim()) setCell_(SHEET.PEOPLE, found._row, 'email', email);
+      if (dept && !String(found.department || '').trim()) setCell_(SHEET.PEOPLE, found._row, 'department', dept);
+    } else {
+      var vals = { name: name, email: email, department: dept, active: 'yes' };
+      sh.getRange(sh.getLastRow() + 1, 1, 1, headers.length).setValues([headers.map(function (h) {
+        return vals[h] === undefined ? '' : vals[h];
+      })]);
+    }
+
+    return { status: status, name: name, has_email: !!email, people: peopleList_() };
+  });
+}
+
 function findMeeting_(id) {
   var m = readTable_(SHEET.MEETINGS).filter(function (x) {
     return String(x.meeting_id).trim() === String(id).trim();

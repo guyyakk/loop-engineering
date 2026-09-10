@@ -25,6 +25,7 @@
   .dept .pick { margin-left:auto; font-size:12px; color:var(--muted); }
   .dept .pick.has { color:var(--blue); font-weight:bold; }
   .alldept { font-size:12px; color:var(--blue); cursor:pointer; text-decoration:underline; margin-left:4px; }
+  .addbox { border:1px dashed var(--blue); border-radius:8px; padding:12px; margin-top:8px; background:#f8fbff; }
   .chip { border:1px solid var(--line); border-radius:16px; padding:5px 12px; cursor:pointer; background:#fff; user-select:none; }
   .chip.on { background:#e7f5ff; border-color:var(--blue); color:var(--blue); font-weight:bold; }
   table { width:100%; border-collapse:collapse; }
@@ -106,6 +107,26 @@
 <div class="card">
   <h2>ผู้เข้าร่วม <small id="peopleTotal">ยังไม่ได้เลือกใคร</small></h2>
   <div id="people"></div>
+
+  <a id="addPersonToggle" class="alldept" style="display:inline-block;margin-top:8px"
+     onclick="toggleAddPerson(true)">+ มีคนมาเพิ่ม พิมพ์ชื่อเข้าไปเลย</a>
+
+  <div id="addPerson" class="addbox" hidden>
+    <div class="grid g3">
+      <div><label>ชื่อ *</label><input id="newName" placeholder="ชื่อที่ใช้เรียกในทีม"></div>
+      <div><label>แผนก</label><input id="newDept" list="deptList" placeholder="เช่น QC / แขกภายนอก"></div>
+      <div><label>อีเมล (ไม่บังคับ)</label><input id="newEmail" type="email" placeholder="ใส่ทีหลังได้"></div>
+    </div>
+    <datalist id="deptList"></datalist>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn primary" id="btnAddPerson" onclick="submitNewPerson()">เพิ่มและเลือกเป็นผู้เข้าร่วม</button>
+      <button class="btn" onclick="toggleAddPerson(false)">ปิด</button>
+      <span id="addPersonMsg" class="hint" style="margin:0"></span>
+    </div>
+    <div class="hint">คนที่เพิ่มจะถูกบันทึกลงชีต people จริง จึงรับงานและรับอีเมลได้ในครั้งต่อ ๆ ไป
+      · ไม่ใส่อีเมลก็เพิ่มได้ แต่คนนั้นจะไม่ได้รับสรุปทางเมล</div>
+  </div>
+
   <div class="hint">แยกตามแผนกจากคอลัมน์ department ในชีต people · กดหัวแผนกเพื่อพับ/กาง · กดชื่อเพื่อเลือก</div>
 </div>
 
@@ -548,6 +569,85 @@ function doNewMeeting() {
     .webStartNew();
 }
 
+/* ---- เพิ่มคนใหม่ระหว่างประชุม ----
+   มีคนมาร่วมประชุมที่ยังไม่อยู่ในทะเบียน ต้องเพิ่มได้จากหน้านี้เลย
+   ไม่ต้องออกไปเปิดชีต เพราะระหว่างประชุมไม่มีใครอยากสลับหน้าจอ */
+
+function toggleAddPerson(show) {
+  el('addPerson').hidden = !show;
+  el('addPersonToggle').hidden = show;
+  if (show) {
+    fillDeptSuggestions();
+    el('newName').focus();
+  }
+}
+
+/** เติมรายชื่อแผนกที่มีอยู่แล้วเป็นตัวเลือก จะได้ไม่พิมพ์แผนกเพี้ยนกันคนละแบบ */
+function fillDeptSuggestions() {
+  el('deptList').innerHTML = deptNames()
+    .filter(function (d) { return d !== NO_DEPT; })
+    .map(function (d) { return '<option value="' + escAttr(d) + '">'; })
+    .join('');
+}
+
+function submitNewPerson() {
+  var name = el('newName').value.trim();
+  if (!name) {
+    el('addPersonMsg').textContent = 'ยังไม่ได้พิมพ์ชื่อ';
+    el('newName').focus();
+    return;
+  }
+  var payload = {
+    name: name,
+    department: el('newDept').value.trim(),
+    email: el('newEmail').value.trim()
+  };
+  el('addPersonMsg').textContent = 'กำลังเพิ่ม…';
+  el('btnAddPerson').disabled = true;
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      el('btnAddPerson').disabled = false;
+      PEOPLE = res.people;
+
+      // เก็บคนที่เลือกไว้เดิม แล้วเพิ่มคนใหม่เข้าไปด้วย
+      var selected = collect().attendees;
+      if (selected.indexOf(res.name) === -1) selected.push(res.name);
+      renderPeople(selected);
+      refreshPersonSelects();
+
+      el('newName').value = '';
+      el('newEmail').value = '';
+      el('addPersonMsg').textContent =
+        (res.status === 'added' ? 'เพิ่ม ' : 'มีอยู่แล้ว เลือกให้ ') + res.name +
+        (res.has_email ? '' : ' (ยังไม่มีอีเมล จะไม่ได้รับสรุปทางเมล)');
+      DIRTY = true;
+      el('newName').focus();
+    })
+    .withFailureHandler(function (e) {
+      el('btnAddPerson').disabled = false;
+      el('addPersonMsg').textContent = e.message;
+    })
+    .webAddPerson(payload);
+}
+
+/**
+ * สร้าง dropdown เลือกคนใหม่ทุกช่อง หลังทะเบียนรายชื่อเปลี่ยน
+ * ต้องเก็บค่าที่เลือกไว้ก่อนแล้วใส่กลับ ไม่งั้นงานที่ระบุผู้รับผิดชอบไว้แล้วจะโดนล้าง
+ */
+function refreshPersonSelects() {
+  ['chair', 'note_taker'].forEach(function (id) {
+    var cur = el(id).value;
+    el(id).innerHTML = personOptions(cur);
+    el(id).value = cur;
+  });
+  [].slice.call(el('rows').querySelectorAll('.owner')).forEach(function (sel) {
+    var cur = sel.value;
+    sel.innerHTML = personOptions(cur);
+    sel.value = cur;
+  });
+}
+
 /* ---- โหมดส่ง: แสดงและสลับจากหน้าเว็บ ----
    ผู้ใช้ที่ใช้เฉพาะลิงก์ Web App จะไม่เห็นเมนูในชีต ถ้าไม่มีปุ่มนี้จะปิด DRY_RUN ไม่ได้เลย */
 var CTX = null;
@@ -602,6 +702,8 @@ function init(data) {
   el('rows').innerHTML = '';
   el('result').style.display = 'none';
   hideConfirm();
+  toggleAddPerson(false);
+  el('addPersonMsg').textContent = '';
   ['title', 'start_time', 'end_time', 'location', 'agenda', 'decisions', 'open_issues', 'next_meeting_at']
     .forEach(function (k) { el(k).value = ''; });
 

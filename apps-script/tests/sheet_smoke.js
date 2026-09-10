@@ -298,6 +298,60 @@ suite('testHeaderMigration', function () {
     'หัวตารางสุดท้าย = ' + after[0][16]);
 });
 
+/* ---------------------------------------------------- 5. เพิ่มคนใหม่จากหน้าฟอร์ม */
+
+suite('testAddNewPerson', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  const res = sb.webAddPerson({ name: 'วิภา', department: 'Production', email: 'wipa@example.com' });
+  const rows = dumpSheet(ss, 'people');
+  check('เพิ่มคนใหม่ -> ได้แถวในชีต people และอยู่ในรายชื่อที่ส่งกลับ',
+    res.status === 'added' && rows.length === 4 &&
+    rows[3][0] === 'วิภา' && rows[3][3] === 'yes' &&
+    res.people.some((p) => p.name === 'วิภา' && p.department === 'Production'),
+    JSON.stringify(rows[3]));
+});
+
+suite('testAddPersonWithoutEmail', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  const res = sb.webAddPerson({ name: 'แขกรับเชิญ' });
+  check('เพิ่มได้แม้ไม่ใส่อีเมล และบอกกลับว่ายังไม่มีอีเมล',
+    res.status === 'added' && res.has_email === false, JSON.stringify(res.status));
+});
+
+suite('testAddDuplicatePerson', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  const res = sb.webAddPerson({ name: '  สมชาย  ', email: 'other@example.com' });
+  const rows = dumpSheet(ss, 'people');
+  check('ชื่อซ้ำ -> ไม่สร้างแถวใหม่ และไม่ทับอีเมลเดิม',
+    res.status === 'exists' && rows.length === 3 && rows[1][1] === 'somchai@example.com',
+    'จำนวนแถว ' + (rows.length - 1) + ' อีเมล ' + rows[1][1]);
+});
+
+suite('testReactivatePerson', function () {
+  const ss = freshSheet();
+  const sh = ss.getSheetByName('people');
+  sh.write(2, 4, 'no'); // ปิดใช้งานสมชายไว้
+  const sb = makeSandbox(ss);
+  const res = sb.webAddPerson({ name: 'สมชาย' });
+  check('คนที่เคยปิดใช้งาน -> เปิดกลับให้แทนการสร้างซ้ำ',
+    res.status === 'reactivated' && dumpSheet(ss, 'people')[1][3] === 'yes', res.status);
+});
+
+suite('testAddPersonValidation', function () {
+  const ss = freshSheet();
+  const sb = makeSandbox(ss);
+  let blank = null, multi = null, badEmail = null;
+  try { sb.webAddPerson({ name: '   ' }); } catch (e) { blank = e.message; }
+  try { sb.webAddPerson({ name: 'สมหญิง และ สมศรี' }); } catch (e) { multi = e.message; }
+  try { sb.webAddPerson({ name: 'ทดสอบ', email: 'ไม่ใช่อีเมล' }); } catch (e) { badEmail = e.message; }
+  check('กันชื่อว่าง / ใส่หลายคนในครั้งเดียว / อีเมลผิดรูปแบบ',
+    !!blank && !!multi && !!badEmail && dumpSheet(ss, 'people').length === 3,
+    JSON.stringify([blank, multi, badEmail]));
+});
+
 /* ---------------------------------------------------- สรุปผล */
 
 console.log('\n===== เทสต์ชั้นที่คุยกับชีต =====');

@@ -13,6 +13,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# clasp เขียนความคืบหน้าลง stderr ซึ่ง PowerShell 5.1 จะแปลงเป็น error record
+# ถ้าใครเรียกสคริปต์นี้ต่อท่อด้วย 2>&1 จะทำให้ล้มทั้งที่คำสั่งสำเร็จ
+# จึงเช็คผลจาก $LASTEXITCODE เองแทนการพึ่ง ErrorActionPreference กับคำสั่ง native
+$PSNativeCommandUseErrorActionPreference = $false
+
 $AppsScript = Split-Path -Parent $PSScriptRoot
 Set-Location $AppsScript
 
@@ -38,8 +44,9 @@ var BUILD_STAMP = '$stamp';
 Write-Host "   BUILD_STAMP = $stamp"
 
 Write-Host "== 3/4 push ขึ้น Apps Script ==" -ForegroundColor Cyan
+$ErrorActionPreference = 'Continue'
 & npx.cmd --yes $Clasp push --force
-if ($LASTEXITCODE -ne 0) { throw "clasp push ไม่สำเร็จ" }
+if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = 'Stop'; throw "clasp push ไม่สำเร็จ" }
 
 Write-Host "== 4/4 deploy ทับ deployment เดิม ==" -ForegroundColor Cyan
 $list = & npx.cmd --yes $Clasp deployments
@@ -57,7 +64,8 @@ if (-not $deploymentId) {
   Write-Host "   ใช้ deployment เดิม: $deploymentId"
   & npx.cmd --yes $Clasp deploy --deploymentId $deploymentId --description $Description
 }
-if ($LASTEXITCODE -ne 0) { throw "clasp deploy ไม่สำเร็จ" }
+if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = 'Stop'; throw "clasp deploy ไม่สำเร็จ" }
+$ErrorActionPreference = 'Stop'
 
 if ($deploymentId) {
   Write-Host ""

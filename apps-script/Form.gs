@@ -44,13 +44,18 @@ function parseYmdHm_(s) {
 
 /* ------------------------------------------------------------- โหลดข้อมูลเข้าฟอร์ม */
 
-function formInit() {
-  // ส่งแผนกไปด้วย เพื่อให้ฟอร์มจัดกลุ่มรายชื่อได้เมื่อทีมมีคนเยอะ
-  var people = [];
+/** รายชื่อที่ยังใช้งานอยู่ พร้อมแผนก — ฟอร์มเอาไปจัดกลุ่มเวลาทีมมีคนเยอะ */
+function peopleList_() {
+  var out = [];
   var map = peopleMap_();
   Object.keys(map).forEach(function (n) {
-    if (map[n].active) people.push({ name: n, department: map[n].department || '' });
+    if (map[n].active) out.push({ name: n, department: map[n].department || '' });
   });
+  return out;
+}
+
+function formInit() {
+  var people = peopleList_();
 
   var rows = readTable_(SHEET.MEETINGS);
   var drafts = rows.filter(function (m) {

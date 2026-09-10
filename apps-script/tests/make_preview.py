@@ -84,6 +84,16 @@ function makeApi() {
       });
     },
 
+    webAddPerson: function (p) {
+      CALLS.push('webAddPerson:' + p.name);
+      later(function () {
+        const exists = FAKE_PEOPLE.some(function (x) { return x.name === p.name.trim(); });
+        if (!exists) FAKE_PEOPLE.push({ name: p.name.trim(), department: p.department || '' });
+        h.s({ status: exists ? 'exists' : 'added', name: p.name.trim(),
+              has_email: !!p.email, people: FAKE_PEOPLE });
+      });
+    },
+
     webPreview: function (p) {
       CALLS.push('webPreview:' + (p.items || []).length);
       later(function () {
