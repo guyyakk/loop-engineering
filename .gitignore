@@ -30,3 +30,10 @@ venv/
 
 # Logs
 *.log
+
+# clasp (Apps Script CLI)
+.clasp.json
+.clasprc.json
+
+# ไฟล์พรีวิวฟอร์มที่ generate ขึ้นมาเพื่อทดสอบ UI
+apps-script/tests/preview.html
