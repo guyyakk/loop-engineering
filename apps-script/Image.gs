@@ -10,9 +10,13 @@
  * ชื่อประชุม / วันเวลา-สถานที่ / ผู้เข้าร่วม / วาระ / มติ / งาน (What-Who-When-ต้องใช้อะไร) / ประเด็นค้าง
  */
 
-/** ขนาดสไลด์แนวตั้งที่อยากได้ (จุด) — อัตราส่วนใกล้ 3:5 เหมาะกับการดูบนมือถือ */
-var WANT_W = 420;
-var WANT_H = 700;
+/**
+ * ความกว้างของผืนผ้าใบ (จุด) — ความสูงคำนวณจากเนื้อหาแต่ละครั้ง
+ * Slides export รูปที่ความกว้าง 1600px เสมอ ดังนั้นความกว้างคือสิ่งที่กำหนดว่า
+ * ตัวหนังสือจะใหญ่แค่ไหนในไฟล์จริง (12.5pt บนผืนผ้าใบ 480pt ≈ 42px ในรูป)
+ */
+var CANVAS_W = 480;
+var CANVAS_MAX_H = 2400; // กันกรณีประชุมยาวผิดปกติจนได้รูปสูงเกินจะเปิดดูไหว
 
 /**
  * ลองใหม่เมื่อ API ภายนอกสะดุด
@@ -45,7 +49,11 @@ function buildMeetingImage_(meeting, items) {
     fillTemplate_(pres, meeting, items);
   } else {
     // โหมดวาดเอง: ไม่ต้องเตรียมไฟล์อะไรล่วงหน้า
-    presId = createPresentation_('MOM-temp-' + Date.now());
+    // คำนวณความสูงที่เนื้อหาต้องใช้ก่อน แล้วค่อยสั่งสร้างผืนผ้าใบเท่านั้น
+    // รูปที่ export ออกมากว้าง 1600px เสมอ ผืนผ้าใบยิ่งสูงตัวหนังสือจึงไม่เล็กลง
+    var needH = layout_(imageModel_(meeting, items), CANVAS_W, 1).height;
+    presId = createPresentation_('MOM-temp-' + Date.now(), CANVAS_W,
+                                 Math.min(Math.max(needH, 420), CANVAS_MAX_H));
     pres = SlidesApp.openById(presId);
     if (!pres.getSlides().length) pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
     drawSlide_(pres, meeting, items);
@@ -94,13 +102,13 @@ function buildMeetingImage_(meeting, items) {
  * สร้างสไลด์เปล่า พยายามให้ได้ขนาดแนวตั้งก่อน
  * ถ้า API ไม่ยอมกำหนดขนาด จะได้สไลด์ 16:9 ปกติ ซึ่งเลย์เอาต์รองรับอยู่แล้ว
  */
-function createPresentation_(title) {
+function createPresentation_(title, widthPt, heightPt) {
   try {
     var res = Slides.Presentations.create({
       title: title,
       pageSize: {
-        width: { magnitude: WANT_W, unit: 'PT' },
-        height: { magnitude: WANT_H, unit: 'PT' }
+        width: { magnitude: widthPt, unit: 'PT' },
+        height: { magnitude: heightPt, unit: 'PT' }
       }
     });
     if (res && res.presentationId) return res.presentationId;
@@ -120,66 +128,38 @@ function imageFolder_() {
   return folder;
 }
 
-/* ------------------------------------------------------------ เนื้อหาที่จะใส่ในรูป */
+/* ============================================================ เนื้อหาที่จะใส่ในรูป */
 
 /**
- * แปลงข้อมูลประชุมเป็น "บล็อก" ของข้อความ
- * kind 'h' = หัวข้อ (ตัวหนา), 'p' = เนื้อหา, 'i' = บรรทัดย่อยของงาน (เยื้อง)
- * @param {number} maxItems จำนวนงานที่จะแสดง (0 = ทุกงาน) ใช้ตอนต้องตัดให้พอดีหน้า
+ * รวบข้อมูลประชุมเป็นโครงเดียวที่ตัววาดรูปใช้ต่อได้เลย
+ * แยกจากการวาด เพื่อให้เทสต์ตรวจได้ว่า "ข้อมูลครบไหม" โดยไม่ต้องมี Slides
  */
-function imageBlocks_(meeting, items, maxItems) {
-  var b = [];
+function imageModel_(meeting, items) {
   var sorted = sortItems_(items);
-  var shown = (maxItems && maxItems > 0) ? sorted.slice(0, maxItems) : sorted;
-  var rest = sorted.length - shown.length;
-
-  var attendees = splitNames_(meeting.attendees);
-  if (attendees.length) {
-    b.push({ kind: 'h', text: 'ผู้เข้าร่วม (' + attendees.length + ' คน)' });
-    b.push({ kind: 'p', text: attendees.join(', ') });
-    var absent = splitNames_(meeting.absentees);
-    if (absent.length) b.push({ kind: 'p', text: 'ไม่เข้าร่วม: ' + absent.join(', ') });
-  }
-
-  var agenda = splitLines_(meeting.agenda);
-  if (agenda.length) {
-    b.push({ kind: 'h', text: 'วาระการประชุม' });
-    agenda.forEach(function (a, i) { b.push({ kind: 'p', text: (i + 1) + '. ' + a }); });
-  }
-
-  var decisions = splitLines_(meeting.decisions);
-  if (decisions.length) {
-    b.push({ kind: 'h', text: 'มติที่ประชุม' });
-    decisions.forEach(function (d) { b.push({ kind: 'p', text: '• ' + d }); });
-  }
-
-  b.push({ kind: 'h', text: 'สิ่งที่ต้องทำ (' + sorted.length + ' รายการ)' });
-  if (!shown.length) {
-    b.push({ kind: 'p', text: 'ไม่มีงานที่ต้องติดตามจากการประชุมนี้' });
-  }
-  shown.forEach(function (it, i) {
-    b.push({ kind: 'p', text: (i + 1) + '. ' + String(it.task || '').trim() });
-    b.push({
-      kind: 'i',
-      text: 'ใคร: ' + String(it.owner || '-').trim() +
-            '  ·  ครบ: ' + fmtDate_(it.due_date) +
-            '  ·  ระดับ: ' + String(it.priority || 'Medium')
-    });
-    if (String(it.note || '').trim()) {
-      b.push({ kind: 'i', text: 'ต้องใช้: ' + String(it.note).trim() });
-    }
-  });
-  if (rest > 0) {
-    b.push({ kind: 'i', text: 'และอีก ' + rest + ' รายการ — ดูรายละเอียดในอีเมล' });
-  }
-
-  var issues = splitLines_(meeting.open_issues);
-  if (issues.length) {
-    b.push({ kind: 'h', text: 'ประเด็นค้าง / ความเสี่ยง' });
-    issues.forEach(function (o) { b.push({ kind: 'p', text: '• ' + o }); });
-  }
-
-  return b;
+  return {
+    title: String(meeting.title || 'สรุปการประชุม').trim(),
+    date: fmtDate_(meeting.date),
+    time: [fmtTime_(meeting.start_time), fmtTime_(meeting.end_time)].filter(String).join('–'),
+    location: String(meeting.location || '').trim(),
+    chair: String(meeting.chair || '-').trim(),
+    note_taker: String(meeting.note_taker || '-').trim(),
+    attendees: splitNames_(meeting.attendees),
+    absentees: splitNames_(meeting.absentees),
+    agenda: splitLines_(meeting.agenda),
+    decisions: splitLines_(meeting.decisions),
+    issues: splitLines_(meeting.open_issues),
+    next_meeting: toDate_(meeting.next_meeting_at) ? fmtDateTime_(meeting.next_meeting_at) : '',
+    meeting_id: String(meeting.meeting_id || '').trim(),
+    items: sorted.map(function (it) {
+      return {
+        task: String(it.task || '').trim(),
+        owner: String(it.owner || '-').trim(),
+        due: fmtDate_(it.due_date),
+        priority: String(it.priority || PRIORITY[1]),
+        need: String(it.note || '').trim()
+      };
+    })
+  };
 }
 
 function imageFooter_(meeting) {
@@ -189,6 +169,273 @@ function imageFooter_(meeting) {
     parts.push('ประชุมครั้งหน้า ' + fmtDateTime_(meeting.next_meeting_at));
   }
   return parts.join('  ·  ');
+}
+
+/* ================================================================ วาดรูปลงสไลด์ */
+
+var C = {
+  blue: '#1971c2', navy: '#14213d', ink: '#212529', gray: '#495057',
+  mute: '#868e96', line: '#e9ecef', tint: '#f8fbff', band: '#f1f3f5',
+  red: '#c92a2a', redBg: '#fff0f0', white: '#ffffff'
+};
+
+/** ประมาณจำนวนบรรทัดหลังตัดคำ — วัดข้อความจริงในสไลด์ไม่ได้ จึงประมาณจากจำนวนอักษร */
+function lineCount_(text, fontSize, widthPt) {
+  var perLine = Math.max(8, Math.floor(widthPt / (fontSize * 0.5)));
+  return Math.max(1, Math.ceil(String(text || '').length / perLine));
+}
+
+/**
+ * คำนวณความสูงที่เนื้อหาต้องใช้ และตำแหน่งของทุกชิ้น
+ * แยกออกมาเพื่อให้รู้ความสูงก่อนสร้างสไลด์ จะได้สั่งขนาดผืนผ้าใบให้พอดีเนื้อหา
+ * (รูปที่ export ออกมากว้าง 1600px เสมอ ผืนผ้าใบยิ่งสูงตัวหนังสือจึงไม่เล็กลง)
+ */
+function layout_(m, W, scale) {
+  var s = scale || 1;
+  var M = 28 * s;
+  var inner = W - M * 2;
+  var f = {
+    title: 22 * s, sub: 12.5 * s, roleK: 9.5 * s, roleV: 13 * s,
+    head: 12 * s, body: 12.5 * s, th: 10.5 * s, td: 13 * s, need: 10 * s,
+    foot: 10.5 * s
+  };
+  var plan = { W: W, M: M, inner: inner, f: f, s: s, parts: [] };
+  var y = 0;
+
+  var barH = 10 * s;
+  plan.parts.push({ t: 'bar', y: 0, h: barH });
+  y += barH + 14 * s;
+
+  var titleH = lineCount_(m.title, f.title, inner) * f.title * 1.25;
+  plan.parts.push({ t: 'title', y: y, h: titleH });
+  y += titleH + 8 * s;
+
+  var sub = subLine_(m);
+  var subH = lineCount_(sub, f.sub, inner) * f.sub * 1.3;
+  plan.parts.push({ t: 'sub', y: y, h: subH, text: sub });
+  y += subH + 12 * s;
+
+  var rolesH = 40 * s;
+  plan.parts.push({ t: 'roles', y: y, h: rolesH });
+  y += rolesH;
+
+  y = section_(plan, y, 'ผู้เข้าร่วมประชุม (' + m.attendees.length + ' คน)',
+               [m.attendees.join(' · ') || '-'].concat(
+                 m.absentees.length ? ['ไม่เข้าร่วม: ' + m.absentees.join(' · ')] : []));
+  if (m.agenda.length) {
+    y = section_(plan, y, 'วาระการประชุม',
+                 m.agenda.map(function (a, i) { return (i + 1) + '. ' + a; }));
+  }
+  if (m.decisions.length) {
+    y = section_(plan, y, 'มติที่ประชุม', m.decisions.map(function (d) { return '• ' + d; }));
+  }
+
+  // ตารางงาน — ส่วนที่ต้องอ่านง่ายที่สุด
+  y += 16 * s;
+  plan.parts.push({ t: 'head', y: y, h: f.head * 1.4, text: 'สิ่งที่ต้องทำ (' + m.items.length + ' รายการ)' });
+  y += f.head * 1.4 + 8 * s;
+
+  var col = {
+    n: 26 * s,
+    who: 92 * s,
+    due: 104 * s
+  };
+  col.task = inner - col.n - col.who - col.due;
+  plan.col = col;
+
+  var thH = 24 * s;
+  plan.parts.push({ t: 'thead', y: y, h: thH });
+  y += thH;
+
+  if (!m.items.length) {
+    var emptyH = f.td * 2;
+    plan.parts.push({ t: 'empty', y: y, h: emptyH });
+    y += emptyH;
+  }
+  m.items.forEach(function (it, i) {
+    var taskW = col.task - 12 * s;
+    var lines = lineCount_(it.task + '   ' + it.priority, f.td, taskW);
+    var h = lines * f.td * 1.35 + 14 * s;
+    if (it.need) h += lineCount_('ต้องใช้: ' + it.need, f.need, taskW) * f.need * 1.3 + 4 * s;
+    plan.parts.push({ t: 'row', y: y, h: h, i: i, item: it });
+    y += h;
+  });
+
+  if (m.issues.length) {
+    y = section_(plan, y + 8 * s, 'ประเด็นค้าง / ความเสี่ยง',
+                 m.issues.map(function (o) { return '• ' + o; }));
+  }
+
+  y += 16 * s;
+  var footH = 30 * s;
+  plan.parts.push({ t: 'foot', y: y, h: footH });
+  y += footH;
+
+  plan.height = y;
+  return plan;
+}
+
+function subLine_(m) {
+  var bits = [];
+  if (m.date) bits.push('วันที่ ' + m.date);
+  if (m.time) bits.push('เวลา ' + m.time);
+  if (m.location) bits.push('สถานที่ ' + m.location);
+  return bits.join('   ·   ');
+}
+
+/** เพิ่มหัวข้อ + เนื้อหาลงในแผน แล้วคืนตำแหน่ง y ถัดไป */
+function section_(plan, y, heading, lines) {
+  var f = plan.f, s = plan.s;
+  y += 14 * s;
+  plan.parts.push({ t: 'head', y: y, h: f.head * 1.4, text: heading });
+  y += f.head * 1.4 + 6 * s;
+  lines.forEach(function (text) {
+    var h = lineCount_(text, f.body, plan.inner) * f.body * 1.45;
+    plan.parts.push({ t: 'line', y: y, h: h, text: text });
+    y += h + 3 * s;
+  });
+  return y;
+}
+
+/** วาดตามแผนที่คำนวณไว้ */
+function drawPlan_(slide, m, plan) {
+  var W = plan.W, M = plan.M, f = plan.f, s = plan.s, col = plan.col;
+
+  plan.parts.forEach(function (p) {
+    if (p.t === 'bar') {
+      rect_(slide, 0, p.y, W, p.h, C.blue);
+
+    } else if (p.t === 'title') {
+      text_(slide, m.title, M, p.y, plan.inner, p.h, f.title, true, C.navy);
+
+    } else if (p.t === 'sub') {
+      text_(slide, p.text, M, p.y, plan.inner, p.h, f.sub, false, C.gray);
+
+    } else if (p.t === 'roles') {
+      rect_(slide, 0, p.y, W, 1, C.line);
+      rect_(slide, 0, p.y + p.h, W, 1, C.line);
+      var roles = [
+        ['ประธาน', m.chair],
+        ['ผู้จดบันทึก', m.note_taker],
+        ['ผู้เข้าร่วม', m.attendees.length + ' คน']
+      ];
+      var cw = plan.inner / 3;
+      roles.forEach(function (r, i) {
+        var x = M + cw * i;
+        text_(slide, r[0], x, p.y + 6 * s, cw - 6 * s, f.roleK * 1.4, f.roleK, false, C.mute);
+        text_(slide, r[1], x, p.y + 6 * s + f.roleK * 1.4, cw - 6 * s, f.roleV * 1.5, f.roleV, true, C.ink);
+        if (i > 0) rect_(slide, x - 8 * s, p.y + 6 * s, 1, p.h - 12 * s, C.line);
+      });
+
+    } else if (p.t === 'head') {
+      text_(slide, p.text, M, p.y, plan.inner, p.h, f.head, true, C.blue);
+      rect_(slide, M, p.y + p.h + 1 * s, plan.inner, 1.5 * s, '#e7f5ff');
+
+    } else if (p.t === 'line') {
+      text_(slide, p.text, M, p.y, plan.inner, p.h, f.body, false, C.ink);
+
+    } else if (p.t === 'thead') {
+      rect_(slide, M, p.y, plan.inner, p.h, C.blue);
+      var hx = M;
+      [['#', col.n], ['ทำอะไร', col.task], ['ใคร', col.who], ['ครบกำหนด', col.due]]
+        .forEach(function (c) {
+          text_(slide, c[0], hx + 6 * s, p.y + 4 * s, c[1] - 8 * s, p.h - 6 * s, f.th, true, C.white);
+          hx += c[1];
+        });
+
+    } else if (p.t === 'empty') {
+      text_(slide, 'ไม่มีงานที่ต้องติดตามจากการประชุมนี้', M + 6 * s, p.y + 4 * s,
+            plan.inner - 12 * s, p.h, f.td, false, C.mute);
+
+    } else if (p.t === 'row') {
+      var it = p.item;
+      if (p.i % 2 === 1) rect_(slide, M, p.y, plan.inner, p.h, C.tint);
+      rect_(slide, M, p.y + p.h - 1, plan.inner, 1, C.line);
+
+      var x = M;
+      text_(slide, String(p.i + 1), x + 6 * s, p.y + 7 * s, col.n - 8 * s, f.td * 1.4, f.th, false, C.mute);
+      x += col.n;
+
+      var taskText = it.task + (it.priority === PRIORITY[0] ? '   [' + it.priority + ']' : '');
+      var taskH = lineCount_(taskText, f.td, col.task - 12 * s) * f.td * 1.35;
+      text_(slide, taskText, x + 6 * s, p.y + 6 * s, col.task - 12 * s, taskH, f.td, true, C.ink);
+      if (it.need) {
+        text_(slide, 'ต้องใช้: ' + it.need, x + 6 * s, p.y + 6 * s + taskH,
+              col.task - 12 * s, p.h - taskH - 8 * s, f.need, false, C.gray);
+      }
+      x += col.task;
+
+      text_(slide, it.owner, x + 6 * s, p.y + 6 * s, col.who - 8 * s, f.td * 1.5, f.td, true, C.ink);
+      x += col.who;
+      text_(slide, it.due, x + 6 * s, p.y + 6 * s, col.due - 8 * s, f.td * 1.5, f.td, true, C.red);
+
+    } else if (p.t === 'foot') {
+      rect_(slide, 0, p.y, W, p.h, C.band);
+      var left = m.next_meeting ? 'ประชุมครั้งถัดไป  ' + m.next_meeting : '';
+      text_(slide, left, M, p.y + 8 * s, plan.inner * 0.7, p.h, f.foot, true, C.navy);
+      text_(slide, m.meeting_id, M + plan.inner * 0.7, p.y + 8 * s, plan.inner * 0.3, p.h,
+            f.foot, false, C.gray, SlidesApp.ParagraphAlignment.END);
+    }
+  });
+}
+
+function rect_(slide, l, t, w, h, color) {
+  var shape = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, l, t, Math.max(w, 1), Math.max(h, 1));
+  shape.getFill().setSolidFill(color);
+  shape.getBorder().setTransparent();
+  return shape;
+}
+
+function text_(slide, str, l, t, w, h, size, bold, color, align) {
+  var box = slide.insertTextBox(String(str === '' || str === undefined ? ' ' : str),
+                                l, t, Math.max(w, 10), Math.max(h, size * 1.2));
+  var range = box.getText();
+  range.getTextStyle()
+    .setFontSize(size)
+    .setForegroundColor(color)
+    .setBold(!!bold)
+    .setFontFamily('Sarabun');
+  range.getParagraphs().forEach(function (para) {
+    var ps = para.getRange().getParagraphStyle();
+    ps.setLineSpacing(100).setSpaceAbove(0).setSpaceBelow(0);
+    if (align) ps.setParagraphAlignment(align);
+  });
+  return box;
+}
+
+/**
+ * วาดทั้งหน้า — ปรับตัวตามขนาดผืนผ้าใบที่ได้จริง
+ * ถ้า API ไม่ยอมกำหนดขนาด เราจะได้สไลด์ 16:9 ซึ่งเตี้ยกว่าที่เนื้อหาต้องการมาก
+ * จึงย่อสเกลลงให้พอดี และถ้าย่อจนเล็กเกินอ่านแล้วยังไม่พอ ค่อยตัดจำนวนงาน
+ */
+function drawSlide_(pres, meeting, items) {
+  var slide = pres.getSlides()[0];
+  slide.getPageElements().forEach(function (el) { el.remove(); });
+  slide.getBackground().setSolidFill(C.white);
+
+  var W = pres.getPageWidth();
+  var H = pres.getPageHeight();
+  var model = imageModel_(meeting, items);
+
+  var plan = layout_(model, W, 1);
+  if (plan.height > H) {
+    var scale = Math.max(0.62, H / plan.height);
+    plan = layout_(model, W, scale);
+
+    // ย่อแล้วยังไม่พอ: ตัดจำนวนงานลงทีละรายการ แล้วบอกจำนวนที่เหลือแทน
+    var keep = model.items.length;
+    while (plan.height > H && keep > 1) {
+      keep--;
+      var trimmed = imageModel_(meeting, items);
+      var rest = trimmed.items.length - keep;
+      trimmed.items = trimmed.items.slice(0, keep);
+      trimmed.issues = trimmed.issues.concat(['และอีก ' + rest + ' รายการ — ดูรายละเอียดในอีเมล']);
+      model = trimmed;
+      plan = layout_(model, W, scale);
+    }
+  }
+
+  drawPlan_(slide, model, plan);
 }
 
 /** ข้อมูลสำหรับโหมดเทมเพลต ({{...}} ในไฟล์สไลด์ของผู้ใช้) */
@@ -230,127 +477,3 @@ function fillTemplate_(pres, meeting, items) {
   pres.replaceAllText('{{FOOTER}}', p.footer);
 }
 
-/* ------------------------------------------------------------------- วาดสไลด์เอง */
-
-/**
- * ประมาณจำนวนบรรทัดหลังตัดคำ เพื่อเลือกขนาดฟอนต์ให้เนื้อหาพอดีหน้า
- * Slides API วัดความกว้างข้อความจริงไม่ได้ จึงประมาณจากจำนวนตัวอักษร
- * ตัวคูณ 0.52 มาจากความกว้างเฉลี่ยของอักษรไทยผสมอังกฤษเทียบกับขนาดฟอนต์
- */
-function estimateLines_(blocks, fontSize, textWidth) {
-  var perLine = Math.max(16, Math.floor(textWidth / (fontSize * 0.52)));
-  var lines = 0;
-  blocks.forEach(function (b) {
-    lines += Math.max(1, Math.ceil(String(b.text).length / perLine));
-    if (b.kind === 'h') lines += 0.5; // หัวข้อมีระยะห่างด้านบน
-  });
-  return lines;
-}
-
-function drawSlide_(pres, meeting, items) {
-  var slide = pres.getSlides()[0];
-  slide.getPageElements().forEach(function (el) { el.remove(); }); // ล้าง placeholder เริ่มต้น
-
-  var W = pres.getPageWidth();
-  var H = pres.getPageHeight();
-  var M = Math.round(W * 0.055);
-  var textW = W - 2 * M;
-
-  slide.getBackground().setSolidFill('#ffffff');
-  var bar = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 0, 0, W, Math.max(5, W * 0.014));
-  bar.getFill().setSolidFill('#1971c2');
-  bar.getBorder().setTransparent();
-
-  var titleSize = Math.min(26, Math.max(15, W / 22));
-  var metaSize = Math.max(9, titleSize * 0.52);
-  var footSize = Math.max(7, titleSize * 0.4);
-
-  var y = M * 0.9;
-  var titleH = titleSize * 2.6;
-  textBox_(slide, String(meeting.title || 'สรุปการประชุม').trim(), M, y, textW, titleH,
-           titleSize, true, '#212529');
-  y += titleH;
-
-  var metaH = metaSize * 2.4;
-  textBox_(slide, meetingHeadline_(meeting), M, y, textW, metaH, metaSize, false, '#495057');
-  y += metaH + M * 0.3;
-
-  var footerH = footSize * 2.2;
-  var bodyH = H - y - footerH - M * 0.8;
-
-  // เลือกขนาดฟอนต์ที่ใหญ่ที่สุดที่ยังใส่เนื้อหาได้ครบ ถ้าเล็กสุดแล้วยังไม่พอ ค่อยตัดจำนวนงาน
-  var blocks = imageBlocks_(meeting, items, 0);
-  var size = fitFontSize_(blocks, textW, bodyH);
-  if (!size) {
-    var total = items.length;
-    for (var keep = total - 1; keep >= 1; keep--) {
-      blocks = imageBlocks_(meeting, items, keep);
-      size = fitFontSize_(blocks, textW, bodyH);
-      if (size) break;
-    }
-    if (!size) { size = 7; }
-  }
-
-  drawBlocks_(slide, blocks, M, y, textW, bodyH, size);
-
-  textBox_(slide, imageFooter_(meeting), M, H - footerH - M * 0.4, textW, footerH,
-           footSize, false, '#868e96');
-}
-
-/** คืนขนาดฟอนต์ที่พอดี หรือ null ถ้าใส่ไม่ลงแม้ขนาดเล็กสุด */
-function fitFontSize_(blocks, textW, bodyH) {
-  for (var fs = 13; fs >= 7; fs -= 0.5) {
-    if (estimateLines_(blocks, fs, textW) * (fs * 1.42) <= bodyH) return fs;
-  }
-  return null;
-}
-
-/**
- * วาดเนื้อหาทั้งหมดในกล่องข้อความเดียว แล้วค่อยไล่ทำหัวข้อให้เป็นตัวหนา
- * ใช้กล่องเดียวเพราะให้ Slides ตัดคำเองแม่นกว่าการคำนวณตำแหน่งทีละบรรทัด
- */
-function drawBlocks_(slide, blocks, x, y, w, h, fontSize) {
-  var text = blocks.map(function (b) {
-    return (b.kind === 'i' ? '     ' : '') + b.text;
-  }).join('\n');
-
-  var box = slide.insertTextBox(text || ' ', x, y, w, h);
-  var range = box.getText();
-  range.getTextStyle()
-    .setFontSize(fontSize)
-    .setForegroundColor('#212529')
-    .setBold(false)
-    .setFontFamily('Sarabun');
-
-  // ทำหัวข้อให้เด่นขึ้น โดยหาช่วงตัวอักษรของแต่ละบรรทัดตามลำดับที่ประกอบไว้
-  var pos = 0;
-  blocks.forEach(function (b) {
-    var line = (b.kind === 'i' ? '     ' : '') + b.text;
-    if (b.kind === 'h') {
-      range.getRange(pos, pos + line.length).getTextStyle()
-        .setBold(true)
-        .setForegroundColor('#1971c2')
-        .setFontSize(fontSize * 1.1);
-    } else if (b.kind === 'i') {
-      range.getRange(pos, pos + line.length).getTextStyle()
-        .setForegroundColor('#5c6670');
-    }
-    pos += line.length + 1; // +1 คือตัวขึ้นบรรทัดใหม่
-  });
-
-  range.getParagraphs().forEach(function (para) {
-    para.getRange().getParagraphStyle().setLineSpacing(105).setSpaceBelow(1);
-  });
-  return box;
-}
-
-function textBox_(slide, text, left, top, width, height, size, bold, color) {
-  var box = slide.insertTextBox(text || ' ', left, top, width, height);
-  var style = box.getText().getTextStyle();
-  style.setFontSize(size).setForegroundColor(color).setBold(!!bold);
-  style.setFontFamily('Sarabun'); // ฟอนต์ไทยอ่านง่าย ถ้าไม่มีในบัญชี Google จะ fallback ให้เอง
-  box.getText().getParagraphs().forEach(function (para) {
-    para.getRange().getParagraphStyle().setLineSpacing(110).setSpaceBelow(2);
-  });
-  return box;
-}
