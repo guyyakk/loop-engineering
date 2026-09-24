@@ -11,15 +11,20 @@ import {
   getSent,
   getSettings,
   openDb,
+  putMerged,
+  readAll,
+  replaceAll,
   rollOverDay,
   saveLoop,
+  saveLoops,
   saveMeetingMinutes,
   saveSettings,
   undoRitual,
 } from './db'
+import { makeBackup, mergeBackup, parseBackup } from './domain/backup'
 import { DEFAULT_SETTINGS } from './domain/capacity'
 import { toDateKey } from './domain/dates'
-import { createLoop, emptyDraft, newStep, toggleStep } from './domain/loop'
+import { createLoop, emptyDraft, newStep, setStatus, toggleStep } from './domain/loop'
 
 const uniqueName = () => `test-${crypto.randomUUID()}`
 
@@ -135,6 +140,60 @@ describe('db', () => {
     const none = await commitRitual('2026-09-26', [], { reviewAt: 'T' }, db)
     await undoRitual('2026-09-26', [], none, db)
     expect(await getDays('2026-09-26', '2026-09-26', db)).toEqual([])
+    db.close()
+  })
+
+  it('restores a backup into an empty database on another machine with every field intact', async () => {
+    const source = openDb(uniqueName())
+    const at = new Date(2026, 8, 25, 10)
+    let a = createLoop({ ...emptyDraft('today'), title: 'ใบเสนอราคา', estimateMinutes: 120, steps: [newStep('ขอราคา'), newStep('ส่ง')] }, at)
+    a = toggleStep(a, a.steps[0].id, at)
+    const b = setStatus(createLoop({ ...emptyDraft('week'), title: 'รอพี่นก' }, at), 'waiting', at, { waitingOn: 'พี่นก', followUpDate: '2026-09-29' })
+    const c = setStatus(createLoop({ ...emptyDraft('later'), title: 'ปิดแล้ว' }, at), 'dropped', at)
+    await saveLoops([a, b, c], source)
+    await saveMeetingMinutes('2026-09-25', 90, source)
+    await commitRitual('2026-09-25', [], { shutdownAt: at.toISOString(), note: 'โน้ต' }, source)
+    await saveSettings({ ...DEFAULT_SETTINGS, workMinutes: 420, particle: 'ครับ' }, source)
+
+    const exported = await readAll(source)
+    const text = JSON.stringify(makeBackup(exported.loops, exported.days, exported.settings, at))
+    source.close()
+
+    const fresh = openDb(uniqueName())
+    const parsed = parseBackup(text)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    await replaceAll(parsed.backup, fresh)
+    const restored = await readAll(fresh)
+    const byId = <T extends { id: string }>(xs: T[]) => [...xs].sort((x, y) => x.id.localeCompare(y.id))
+    expect(byId(restored.loops)).toEqual(byId(exported.loops))
+    expect(restored.days).toEqual(exported.days)
+    expect(restored.settings).toEqual(exported.settings)
+    fresh.close()
+  })
+
+  it('replaceAll wipes old data, and merging keeps local newer edits', async () => {
+    const db = openDb(uniqueName())
+    const at = new Date(2026, 8, 25, 10)
+    const old = createLoop({ ...emptyDraft('today'), title: 'ของเดิม' }, at)
+    await saveLoops([old], db)
+    await saveMeetingMinutes('2026-09-24', 30, db)
+    const snapshot = await readAll(db)
+
+    const incoming = createLoop({ ...emptyDraft('week'), title: 'จากไฟล์' }, at)
+    await replaceAll({ loops: [incoming], days: [], settings: DEFAULT_SETTINGS }, db)
+    expect((await readAll(db)).loops.map((l) => l.title)).toEqual(['จากไฟล์'])
+    expect((await readAll(db)).days).toEqual([])
+
+    // เลิกทำการนำเข้า = แทนที่ด้วยข้อมูลก่อนหน้า
+    await replaceAll(snapshot, db)
+    const back = await readAll(db)
+    expect(back.loops).toEqual(snapshot.loops)
+    expect(back.days).toEqual(snapshot.days)
+
+    const plan = mergeBackup(back, makeBackup([incoming, { ...old, title: 'เก่ากว่า', updatedAt: '2020-01-01T00:00:00.000Z' }], [], DEFAULT_SETTINGS, at))
+    await putMerged(plan.loops, plan.days, db)
+    expect((await readAll(db)).loops.map((l) => l.title).sort()).toEqual(['ของเดิม', 'จากไฟล์'])
     db.close()
   })
 })

@@ -116,7 +116,8 @@ input {
 }
 
 button,
-a.button {
+a.button,
+label.button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -131,7 +132,8 @@ a.button {
 }
 
 button:hover,
-a.button:hover {
+a.button:hover,
+label.button:hover {
   background: var(--surface-2);
 }
 
@@ -1225,6 +1227,114 @@ input.chip-date {
 .week-review {
   min-height: 32px;
   font-size: 13px;
+}
+
+/* ---------- data and backup ---------- */
+
+.data-page {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.data-page .metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-value.warn {
+  color: var(--warn);
+}
+
+.data-block {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.data-block h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.file-pick {
+  position: relative;
+  cursor: pointer;
+}
+
+.file-pick:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.import-preview {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 14px;
+}
+
+.link-btn {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.link-btn:hover {
+  background: transparent;
+}
+
+.backup-prompt {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.backup-nudge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 14px;
+}
+
+.data-link {
+  justify-self: start;
+  font-size: 13px;
+}
+
+.app-foot {
+  margin-top: 32px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.app-foot a {
+  color: var(--text-2);
 }
 
 /* ---------- week board ---------- */

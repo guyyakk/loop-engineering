@@ -14,6 +14,8 @@ export interface PlannerSettings {
   notify: boolean
   /** คำลงท้ายในข้อความตามงาน */
   particle: Particle
+  /** เวลาที่ส่งออกไฟล์สำรองล่าสุด */
+  lastBackupAt: string | null
 }
 
 export type Particle = '' | 'ครับ' | 'ค่ะ'
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
   startMinutes: 9 * 60,
   notify: false,
   particle: '',
+  lastBackupAt: null,
 }
 
 /** สัดส่วนที่ถือว่าใกล้เต็ม */

@@ -1,22 +1,13 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { DEFAULT_SETTINGS, type PlannerSettings } from './domain/capacity'
 import { toDateKey, type DateKey } from './domain/dates'
+import type { DayPatch, DayPlan } from './domain/day'
 import { startDay, type Loop } from './domain/loop'
 import type { NotifyKind } from './domain/nudges'
 
+export type { DayPatch, DayPlan }
+
 // ข้อมูลทั้งหมดอยู่ใน IndexedDB ของเครื่องนี้ ไม่มี server
-
-/** ข้อมูลของแต่ละวัน: เวลาประชุม/ธุระ, การแจ้งเตือนที่ส่งไปแล้ว, การปิดวันและการทบทวนสัปดาห์ */
-export interface DayPlan {
-  date: DateKey
-  meetingMinutes: number
-  sent?: Partial<Record<NotifyKind, string>>
-  shutdownAt?: string
-  note?: string
-  reviewAt?: string
-}
-
-export type DayPatch = Partial<Pick<DayPlan, 'shutdownAt' | 'note' | 'reviewAt'>>
 
 interface SettingsRow extends PlannerSettings {
   key: 'planner'
@@ -143,6 +134,39 @@ export function rollOverDay(today: DateKey, workdays: number[], target: OpenLoop
     const changed = startDay(await target.loops.toArray(), today, workdays)
     await target.loops.bulkPut(changed)
     return changed.length
+  })
+}
+
+/** ข้อมูลทั้งหมดของแอป ใช้ทั้งส่งออกไฟล์สำรองและเลิกทำการนำเข้า */
+export interface Snapshot {
+  loops: Loop[]
+  days: DayPlan[]
+  settings: PlannerSettings
+}
+
+export function readAll(target: OpenLoopsDB = db): Promise<Snapshot> {
+  return target.transaction('r', target.loops, target.days, target.settings, async () => ({
+    loops: await target.loops.toArray(),
+    days: await target.days.toArray(),
+    settings: await getSettings(target),
+  }))
+}
+
+/** แทนที่ข้อมูลทั้งหมดในธุรกรรมเดียว ถ้าพังกลางทางข้อมูลเดิมยังอยู่ครบ */
+export function replaceAll(data: Snapshot, target: OpenLoopsDB = db): Promise<void> {
+  return target.transaction('rw', target.loops, target.days, target.settings, async () => {
+    await Promise.all([target.loops.clear(), target.days.clear(), target.settings.clear()])
+    await target.loops.bulkPut(data.loops)
+    await target.days.bulkPut(data.days)
+    await target.settings.put({ key: 'planner', ...data.settings })
+  })
+}
+
+/** เพิ่ม/อัปเดตงานและข้อมูลรายวันที่ผ่านการรวมแล้ว */
+export function putMerged(loops: Loop[], days: DayPlan[], target: OpenLoopsDB = db): Promise<void> {
+  return target.transaction('rw', target.loops, target.days, async () => {
+    await target.loops.bulkPut(loops)
+    await target.days.bulkPut(days)
   })
 }
 

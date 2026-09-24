@@ -240,6 +240,9 @@ export function TodayPanel({
             />
           </div>
           <NotifySettings settings={settings} onChange={onSettingsChange} onTest={onTestNotification} />
+          <a className="button data-link" href="#data">
+            <Icon name="folder" /> ข้อมูลและการสำรอง
+          </a>
         </div>
       )}
     </section>

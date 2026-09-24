@@ -13,6 +13,7 @@ const PATHS = {
   settings: 'M4 6h16M4 12h16M4 18h16M9 4v4M15 10v4M7 16v4',
   alert: 'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
   arrow: 'M5 12h14M13 6l6 6-6 6',
+  download: 'M12 4v12M6 10l6 6 6-6M5 20h14',
   repeat: 'M4 12V9a3 3 0 0 1 3-3h13M17 3l3 3-3 3M20 12v3a3 3 0 0 1-3 3H4M7 21l-3-3 3-3',
 } as const
 

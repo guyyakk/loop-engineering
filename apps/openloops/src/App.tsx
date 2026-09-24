@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { CaptureForm } from './components/CaptureForm'
+import { DataPage, type ImportMode } from './components/DataPage'
 import { Icon, Logo } from './components/Icon'
 import { LoopCard } from './components/LoopCard'
 import { ShutdownWizard, type RitualResult } from './components/ShutdownWizard'
@@ -17,14 +18,17 @@ import {
   getMeetings,
   getSent,
   getSettings,
+  putMerged,
+  readAll,
+  replaceAll,
   rollOverDay,
   saveLoop,
   saveLoops,
   saveMeetingMinutes,
   saveSettings,
   undoRitual,
-  type DayPlan,
 } from './db'
+import { backupAgeDays, backupFileName, backupReminder, makeBackup, mergeBackup, type Backup } from './domain/backup'
 import { DEFAULT_SETTINGS, buildWeek, computeDayLoad, type Particle } from './domain/capacity'
 import { addDays, formatLongDay, nextWorkday, startOfWeek, toDateKey, withDay } from './domain/dates'
 import {
@@ -46,14 +50,26 @@ import {
 } from './domain/loop'
 import { briefMessage, nudgesFor, pendingNotifications, shutdownMessage } from './domain/nudges'
 import { reviewDue } from './domain/rituals'
+import { downloadText } from './download'
 import { permissionState, showNotification } from './notifier'
 
 type Editing = { mode: 'create'; draft: LoopDraft } | { mode: 'edit'; loop: Loop }
-/** undo เก็บสภาพก่อนเปลี่ยนของทุกลูปที่ถูกแก้ในครั้งนั้น และข้อมูลของวันถ้าเป็นพิธีปิดวัน/ทบทวน */
-type Toast = { message: string; undo: Loop[]; day?: { date: string; before: DayPlan | undefined } }
-type View = 'today' | 'week' | 'shutdown' | 'review'
+/** undo คืนสภาพก่อนเปลี่ยน; long = การเปลี่ยนใหญ่ (พิธี, นำเข้า) ให้เวลาเลิกทำนานขึ้น */
+type Toast = { message: string; undo?: () => Promise<void>; long?: boolean }
+type View = 'today' | 'week' | 'shutdown' | 'review' | 'data'
 
-const VIEWS: Record<string, View> = { '#week': 'week', '#shutdown': 'shutdown', '#review': 'review' }
+const VIEWS: Record<string, View> = { '#week': 'week', '#shutdown': 'shutdown', '#review': 'review', '#data': 'data' }
+
+const DISMISS_KEY = 'openloops:backup-reminder-dismissed'
+
+/** จำว่าซ่อนป้ายเตือนสำรองของวันไหน เป็นความสะดวกเฉพาะ browser นี้ อ่านไม่ได้ก็แค่แสดงป้ายตามปกติ */
+function readDismissed(): string | null {
+  try {
+    return window.localStorage.getItem(DISMISS_KEY)
+  } catch {
+    return null
+  }
+}
 
 /** date key ของวันนี้ ที่อัปเดตเองเมื่อกลับมาเปิดแอปข้ามวัน */
 function useToday(): string {
@@ -124,6 +140,7 @@ export function App() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set())
   const [toast, setToast] = useState<Toast | null>(null)
+  const [dismissedOn, setDismissedOn] = useState<string | null>(readDismissed)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const detailRef = useRef<HTMLDialogElement>(null)
 
@@ -142,6 +159,9 @@ export function App() {
   const detail = detailId ? (loops ?? []).find((l) => l.id === detailId) ?? null : null
   const shutdownAt = weekRows?.find((d) => d.date === today)?.shutdownAt
   const shutdownDates = (weekRows ?? []).filter((d) => d.shutdownAt).map((d) => d.date)
+  const showBackupPrompt =
+    storedSettings !== undefined && backupReminder(settings.lastBackupAt, (loops ?? []).length, today, dismissedOn)
+  const backupAge = backupAgeDays(settings.lastBackupAt, today)
   const showReviewPrompt = weekRows !== undefined && reviewDue(today, settings, (weekRows ?? []).filter((d) => d.reviewAt).map((d) => d.date))
   const openCount = groups.today.length + groups.week.length + groups.later.length
   const waitingCount = (loops ?? []).filter((l) => l.status === 'waiting').length
@@ -187,7 +207,7 @@ export function App() {
 
   async function testNotification() {
     const shown = await showNotification(briefMessage(load, nudges), 'openloops-test', '/')
-    setToast({ message: shown ? 'ส่งแจ้งเตือนทดสอบแล้ว' : 'ยังไม่ได้รับสิทธิ์แจ้งเตือนจาก browser', undo: [] })
+    setToast({ message: shown ? 'ส่งแจ้งเตือนทดสอบแล้ว' : 'ยังไม่ได้รับสิทธิ์แจ้งเตือนจาก browser' })
   }
 
   useModal(dialogRef, editing !== null)
@@ -211,7 +231,7 @@ export function App() {
   useEffect(() => {
     if (!toast) return
     // หลังพิธีปิดวัน/ทบทวน ให้เวลาเลิกทำนานกว่าการแก้ทีละงาน
-    const timer = window.setTimeout(() => setToast(null), toast.day ? 15_000 : 6000)
+    const timer = window.setTimeout(() => setToast(null), toast.long ? 15_000 : 6000)
     return () => window.clearTimeout(timer)
   }, [toast])
 
@@ -225,7 +245,7 @@ export function App() {
   async function handleChange(next: Loop, prev: Loop) {
     await saveLoop(next)
     if (isClosed(next) && !isClosed(prev)) {
-      setToast({ message: `${next.status === 'done' ? 'ปิดลูป' : 'ทิ้ง'} "${next.title}" แล้ว`, undo: [prev] })
+      setToast({ message: `${next.status === 'done' ? 'ปิดลูป' : 'ทิ้ง'} "${next.title}" แล้ว`, undo: () => saveLoops([prev]) })
     }
   }
 
@@ -233,33 +253,67 @@ export function App() {
     const now = new Date()
     await saveLoops(targets.map((l) => scheduleOn(l, postponeDate, now)))
     const what = targets.length === 1 ? `"${targets[0].title}"` : `${targets.length} งาน`
-    setToast({ message: `เลื่อน ${what} ${withDay('ไป', postponeDate, today)}แล้ว`, undo: targets })
+    setToast({ message: `เลื่อน ${what} ${withDay('ไป', postponeDate, today)}แล้ว`, undo: () => saveLoops(targets) })
   }
 
   async function move(loop: Loop, target: PlanValue) {
     if (planValueOf(loop, today) === target) return
     if (target !== 'week' && target !== 'later' && target < today) return
     await saveLoop(applyPlan(loop, target, new Date()))
-    setToast({ message: `ย้าย "${loop.title}" ไป${planLabel(target, today)}แล้ว`, undo: [loop] })
+    setToast({ message: `ย้าย "${loop.title}" ไป${planLabel(target, today)}แล้ว`, undo: () => saveLoops([loop]) })
   }
 
   async function undo() {
     if (!toast) return
-    if (toast.day) await undoRitual(toast.day.date, toast.undo, toast.day.before)
-    else await saveLoops(toast.undo)
+    await toast.undo?.()
     setToast(null)
   }
 
   async function finishShutdown({ changed, previous, note }: RitualResult) {
     const before = await commitRitual(today, changed, { shutdownAt: new Date().toISOString(), ...(note ? { note } : {}) })
-    setToast({ message: 'ปิดวันแล้ว เลิกงานได้เลย', undo: previous, day: { date: today, before } })
+    setToast({ message: 'ปิดวันแล้ว เลิกงานได้เลย', undo: () => undoRitual(today, previous, before), long: true })
     window.location.hash = ''
   }
 
   async function finishReview({ changed, previous }: RitualResult) {
     const before = await commitRitual(today, changed, { reviewAt: new Date().toISOString() })
-    setToast({ message: 'บันทึกการทบทวนสัปดาห์แล้ว', undo: previous, day: { date: today, before } })
+    setToast({ message: 'บันทึกการทบทวนสัปดาห์แล้ว', undo: () => undoRitual(today, previous, before), long: true })
     window.location.hash = 'week'
+  }
+
+  async function exportBackup() {
+    const now = new Date()
+    const data = await readAll()
+    const settingsNow = { ...data.settings, lastBackupAt: now.toISOString() }
+    downloadText(backupFileName(now), JSON.stringify(makeBackup(data.loops, data.days, settingsNow, now), null, 2))
+    await saveSettings(settingsNow)
+    setToast({ message: `ดาวน์โหลด ${backupFileName(now)} แล้ว เก็บไว้ในที่ปลอดภัย เช่น Drive หรือ OneDrive` })
+  }
+
+  async function importBackup(backup: Backup, mode: ImportMode) {
+    const before = await readAll()
+    let message: string
+    if (mode === 'replace') {
+      await replaceAll({ loops: backup.loops, days: backup.days, settings: backup.settings })
+      message = `แทนที่ด้วยข้อมูลจากไฟล์แล้ว (${backup.loops.length} งาน)`
+    } else {
+      const plan = mergeBackup(before, backup)
+      await putMerged(plan.loops, plan.days)
+      message = `นำเข้าแล้ว เพิ่ม ${plan.added} งาน · อัปเดต ${plan.updated} งาน`
+    }
+    // งานในไฟล์อาจค้างจากวันก่อน ยกเข้าวันนี้ตามกติกาเดิม
+    await rollOverDay(today, (mode === 'replace' ? backup.settings : before.settings).workdays)
+    setToast({ message, undo: () => replaceAll(before), long: true })
+    window.location.hash = ''
+  }
+
+  function dismissBackupReminder() {
+    try {
+      window.localStorage.setItem(DISMISS_KEY, today)
+    } catch {
+      // เก็บไม่ได้ก็ซ่อนแค่รอบนี้
+    }
+    setDismissedOn(today)
   }
 
   // กดแจ้งเตือนตอนแอปเปิดอยู่: service worker ส่ง hash มาให้เปิดหน้าที่ถูกต้อง
@@ -348,7 +402,20 @@ export function App() {
           settings={settings}
           shutdownDates={shutdownDates}
           onFinish={(result) => void finishReview(result)}
+          onBackup={() => void exportBackup()}
+          lastBackupAt={settings.lastBackupAt}
           onCancel={() => (window.location.hash = 'week')}
+        />
+      )}
+
+      {loops && view === 'data' && (
+        <DataPage
+          loops={loops}
+          today={today}
+          lastBackupAt={settings.lastBackupAt}
+          onExport={() => void exportBackup()}
+          onImport={(backup, mode) => void importBackup(backup, mode)}
+          onClose={() => (window.location.hash = '')}
         />
       )}
 
@@ -374,6 +441,23 @@ export function App() {
             {waitingCount > 0 && <> · รอคนอื่น {waitingCount}</>}
             {groups.closed.length > 0 && <> · ปิดแล้ว {groups.closed.length}</>}
           </p>
+
+          {showBackupPrompt && (
+            <div className="ritual-prompt backup-prompt">
+              <span>
+                <strong>{backupAge === null ? 'ยังไม่เคยสำรองข้อมูล' : `ไม่ได้สำรองข้อมูลมา ${backupAge} วัน`}</strong> งานทั้งหมดอยู่ใน
+                browser นี้ที่เดียว ถ้า browser ล้างข้อมูล งานจะหาย
+              </span>
+              <span className="prompt-actions">
+                <button type="button" className="ghost" onClick={dismissBackupReminder}>
+                  ไว้ทีหลัง
+                </button>
+                <button type="button" className="primary" onClick={() => void exportBackup()}>
+                  สำรองตอนนี้
+                </button>
+              </span>
+            </div>
+          )}
 
           {showReviewPrompt && (
             <div className="ritual-prompt">
@@ -432,6 +516,12 @@ export function App() {
         </>
       )}
 
+      {loops && (view === 'today' || view === 'week') && (
+        <footer className="app-foot">
+          <a href="#data">ข้อมูลและการสำรอง</a>
+        </footer>
+      )}
+
       <dialog ref={dialogRef} className="sheet" onClose={() => setEditing(null)} aria-label="ฟอร์มจดงาน">
         {editing && (
           <CaptureForm
@@ -463,7 +553,7 @@ export function App() {
       {toast && (
         <div className="toast" role="status">
           <span>{toast.message}</span>
-          {(toast.undo.length > 0 || toast.day) && (
+          {toast.undo && (
             <button type="button" onClick={undo}>
               <Icon name="undo" /> เลิกทำ
             </button>

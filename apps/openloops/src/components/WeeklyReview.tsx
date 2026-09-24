@@ -2,7 +2,17 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { getMeetings } from '../db'
 import { buildWeek, type PlannerSettings } from '../domain/capacity'
-import { addDays, formatMinutes, formatShortDay, formatWeekRange, nextWorkday, startOfWeek, type DateKey } from '../domain/dates'
+import {
+  addDays,
+  dateKeyOf,
+  formatMinutes,
+  formatShortDay,
+  formatWeekRange,
+  nextWorkday,
+  startOfWeek,
+  withDay,
+  type DateKey,
+} from '../domain/dates'
 import type { Loop } from '../domain/loop'
 import {
   applyDecisions,
@@ -26,12 +36,14 @@ interface Props {
   shutdownDates: DateKey[]
   onFinish: (result: RitualResult) => void
   onCancel: () => void
+  onBackup: () => void
+  lastBackupAt: string | null
 }
 
 const STEPS = ['สรุปสัปดาห์นี้', 'เคลียร์งานค้าง', 'วางแผนสัปดาห์', 'สรุปและบันทึก']
 const FIRST_DONE = 8
 
-export function WeeklyReview({ loops, today, settings, shutdownDates, onFinish, onCancel }: Props) {
+export function WeeklyReview({ loops, today, settings, shutdownDates, onFinish, onCancel, onBackup, lastBackupAt }: Props) {
   const [step, setStep] = useState(0)
   // เก็บรายการงานค้างตอนเริ่ม ตัดสินใจแล้วรายการจะได้ไม่ขยับไปมา
   const [review] = useState(() => reviewCandidates(loops, today, settings))
@@ -224,6 +236,17 @@ export function WeeklyReview({ loops, today, settings, shutdownDates, onFinish, 
           <p className="field-note">
             {formatWeekRange(targetWeek)}: วางงานไว้ {formatMinutes(week.plannedMinutes)} จากเวลาว่าง {formatMinutes(week.freeMinutes)}
           </p>
+          <div className="backup-nudge">
+            <span>
+              ปิดท้ายสัปดาห์ด้วยการสำรองข้อมูล{' '}
+              <span className="muted">
+                {lastBackupAt ? `(ล่าสุด ${withDay('', dateKeyOf(lastBackupAt), today).trim()})` : '(ยังไม่เคยสำรอง)'}
+              </span>
+            </span>
+            <button type="button" onClick={onBackup}>
+              ดาวน์โหลดไฟล์สำรอง
+            </button>
+          </div>
         </>
       )}
     </RitualFrame>

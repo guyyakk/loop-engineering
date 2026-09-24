@@ -1,6 +1,6 @@
 # Epic: OpenLoops — planner ที่ไม่ยอมให้งานค้างกลางทาง (ร่าง)
 
-> สถานะ: **กำลังทำ** — spec 1–5 เสร็จ (MVP ครบ) — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
+> สถานะ: **กำลังทำ** — spec 1–6 เสร็จ (MVP ครบ พร้อมการสำรองข้อมูล) — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
 
 ## Outcome
 
@@ -46,9 +46,10 @@
 | 3 | [`2026-09-24-openloops-3-week-board.md`](2026-09-24-openloops-3-week-board.md) ✅ | หน้าสัปดาห์นี้, ลากงานลงวัน, ภาระงานรายวัน | MVP |
 | 4 | [`2026-09-24-openloops-4-nudge-engine.md`](2026-09-24-openloops-4-nudge-engine.md) ✅ (รอทดสอบแจ้งเตือนจริง) | กฎการเตือนข้างบน และ notification | MVP |
 | 5 | [`2026-09-24-openloops-5-rituals.md`](2026-09-24-openloops-5-rituals.md) ✅ | ปิดวัน และทบทวนสัปดาห์แบบ wizard | MVP |
-| 6 | `...-openloops-6-calendar.md` | ดึงประชุมจาก Google Calendar มาคำนวณเวลาว่าง, จองเวลาทำงานลงปฏิทิน | v2 |
-| 7 | `...-openloops-7-ai-assist.md` | จดงานด้วยภาษาไทยธรรมดา, แนะนำแผนเช้า, แตกงานใหญ่เป็นขั้น | v2 |
-| 8 | `...-openloops-8-desktop-and-line.md` | แอป tray/แถบลอยบน Windows, hotkey จดงาน, แจ้งเตือนผ่าน LINE | v3 |
+| 6 | [`2026-09-25-openloops-6-backup.md`](2026-09-25-openloops-6-backup.md) ✅ | ส่งออก/นำเข้าไฟล์สำรอง, เตือนให้สำรอง (แทรกตามที่ผู้ใช้ขอ หลังเห็นข้อมูลใน browser หาย) | MVP |
+| 7 | `...-openloops-7-calendar.md` | ดึงประชุมจาก Google Calendar มาคำนวณเวลาว่าง, จองเวลาทำงานลงปฏิทิน | v2 |
+| 8 | `...-openloops-8-ai-assist.md` | จดงานด้วยภาษาไทยธรรมดา, แนะนำแผนเช้า, แตกงานใหญ่เป็นขั้น | v2 |
+| 9 | `...-openloops-9-desktop-and-line.md` | แอป tray/แถบลอยบน Windows, hotkey จดงาน, แจ้งเตือนผ่าน LINE | v3 |
 
 ## Human decision needed
 
