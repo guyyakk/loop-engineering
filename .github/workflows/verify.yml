@@ -18,27 +18,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- JavaScript/TypeScript --------------------------------------
-      # - uses: actions/setup-node@v4
-      #   with:
-      #     node-version: 20
-      # - run: npm ci
-      # - run: npm run lint
-      # - run: npm run typecheck
-      # - run: npm test
-      # - run: npm run build
-
-      # --- Python --------------------------------------------------------
-      # - uses: actions/setup-python@v5
-      #   with:
-      #     python-version: "3.12"
-      # - run: pip install -r requirements.txt
-      # - run: ruff check .
-      # - run: pytest
-
-      # --- Placeholder จนกว่าจะมีโค้ดจริง ---------------------------------
-      - name: No tech stack configured yet
-        run: |
-          echo "ยังไม่มีคำสั่งตรวจสำหรับโปรเจกต์นี้"
-          echo "แก้ไฟล์นี้ (.github/workflows/verify.yml) ให้รัน lint/typecheck/test/build จริง"
-          echo "ตามเทคโนโลยีที่ใช้ ก่อนพึ่งพา CI นี้เป็นหลักฐานใน task spec"
+      # --- apps/openloops (Vite + React + TypeScript PWA) ------------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/openloops/package-lock.json
+      - name: Install
+        working-directory: apps/openloops
+        run: npm ci
+      - name: Typecheck
+        working-directory: apps/openloops
+        run: npm run typecheck
+      - name: Test
+        working-directory: apps/openloops
+        run: npm test
+      - name: Build
+        working-directory: apps/openloops
+        run: npm run build
