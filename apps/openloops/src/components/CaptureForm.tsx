@@ -1,17 +1,9 @@
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { addDays, nextWeekday, type DateKey } from '../domain/dates'
-import {
-  ENERGY_LABEL,
-  HORIZON_LABEL,
-  newStep,
-  validateDraft,
-  type DraftErrors,
-  type Energy,
-  type Horizon,
-  type LoopDraft,
-} from '../domain/loop'
+import { newStep, validateDraft, type DraftErrors, type LoopDraft } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
+import { ENERGY_OPTIONS, ESTIMATE_OPTIONS, HORIZON_OPTIONS } from './options'
 
 interface Props {
   mode: 'create' | 'edit'
@@ -21,26 +13,6 @@ interface Props {
   onSave: (draft: LoopDraft) => void
   onCancel: () => void
 }
-
-const HORIZONS: ChipOption<Horizon>[] = (['today', 'week', 'later'] as const).map((h) => ({
-  value: h,
-  label: HORIZON_LABEL[h],
-}))
-
-const ESTIMATES: ChipOption<number | null>[] = [
-  { value: null, label: 'ไม่ระบุ' },
-  { value: 15, label: '15 นาที' },
-  { value: 30, label: '30 นาที' },
-  { value: 60, label: '1 ชม.' },
-  { value: 120, label: '2 ชม.' },
-  { value: 240, label: '4 ชม.' },
-]
-
-const ENERGIES: ChipOption<Energy | null>[] = [
-  { value: null, label: 'ไม่ระบุ' },
-  { value: 'deep', label: ENERGY_LABEL.deep },
-  { value: 'shallow', label: ENERGY_LABEL.shallow },
-]
 
 export function CaptureForm({ mode, initial, projects, today, onSave, onCancel }: Props) {
   const [draft, setDraft] = useState<LoopDraft>(initial)
@@ -118,7 +90,7 @@ export function CaptureForm({ mode, initial, projects, today, onSave, onCancel }
 
       <div className="field">
         <span className="field-label">ทำเมื่อไหร่</span>
-        <Chips label="ทำเมื่อไหร่" options={HORIZONS} value={draft.horizon} onChange={(horizon) => update({ horizon })} />
+        <Chips label="ทำเมื่อไหร่" options={HORIZON_OPTIONS} value={draft.horizon} onChange={(horizon) => update({ horizon })} />
       </div>
 
       <div className="field">
@@ -139,7 +111,7 @@ export function CaptureForm({ mode, initial, projects, today, onSave, onCancel }
         <span className="field-label">ใช้เวลาประมาณ</span>
         <Chips
           label="ใช้เวลาประมาณ"
-          options={ESTIMATES}
+          options={ESTIMATE_OPTIONS}
           value={draft.estimateMinutes}
           onChange={(estimateMinutes) => update({ estimateMinutes })}
         />
@@ -148,7 +120,7 @@ export function CaptureForm({ mode, initial, projects, today, onSave, onCancel }
 
       <div className="field">
         <span className="field-label">ลักษณะงาน</span>
-        <Chips label="ลักษณะงาน" options={ENERGIES} value={draft.energy} onChange={(energy) => update({ energy })} />
+        <Chips label="ลักษณะงาน" options={ENERGY_OPTIONS} value={draft.energy} onChange={(energy) => update({ energy })} />
       </div>
 
       <div className="field">

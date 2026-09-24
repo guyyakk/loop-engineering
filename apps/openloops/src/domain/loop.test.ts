@@ -8,10 +8,12 @@ import {
   emptyDraft,
   groupLoops,
   newStep,
+  postponeToTomorrow,
   nextStep,
   progress,
   setHorizon,
   setStatus,
+  startDay,
   toggleStep,
   validateDraft,
   validateWaiting,
@@ -203,5 +205,67 @@ describe('groupLoops', () => {
     expect(g.week.map((l) => l.id)).toEqual(['week'])
     expect(g.later).toEqual([])
     expect(g.closed.map((l) => l.id)).toEqual(['done-new', 'done-old'])
+  })
+})
+
+describe('planning across days', () => {
+  const yesterday = new Date(2026, 8, 23, 10, 0)
+  const today = new Date(2026, 8, 24, 9, 0)
+  const TODAY = '2026-09-24'
+  const plan = (title: string, horizon: LoopDraft['horizon'], at = today) => createLoop(draft({ title, horizon }), at, title)
+
+  it('stamps the planned date when a loop enters today, and clears it when it leaves', () => {
+    expect(plan('a', 'today').plannedDate).toBe(TODAY)
+    expect(plan('a', 'week').plannedDate).toBeNull()
+
+    const moved = setHorizon(plan('a', 'week'), 'today', today)
+    expect(moved.plannedDate).toBe(TODAY)
+    expect(setHorizon(moved, 'later', today).plannedDate).toBeNull()
+    // เลือกช่วงเดิมซ้ำ ต้องไม่ล้างวันแผน
+    expect(setHorizon(plan('a', 'today', yesterday), 'today', today).plannedDate).toBe('2026-09-23')
+  })
+
+  it('postponeToTomorrow moves the loop out of today and counts one postponement', () => {
+    const next = postponeToTomorrow(plan('a', 'today'), today)
+    expect(next).toMatchObject({ horizon: 'week', plannedDate: '2026-09-25', rolloverCount: 1 })
+  })
+
+  it('startDay carries unfinished loops once, even when run again', () => {
+    const stale = plan('stale', 'today', yesterday)
+    const [carried] = startDay([stale], TODAY)
+    expect(carried).toMatchObject({ horizon: 'today', plannedDate: TODAY, carriedOn: TODAY, rolloverCount: 1 })
+    expect(startDay([carried], TODAY)).toEqual([])
+  })
+
+  it('startDay keeps waiting loops in today without counting a postponement', () => {
+    const waiting = setStatus(plan('w', 'today', yesterday), 'waiting', yesterday, {
+      waitingOn: 'พี่นก',
+      followUpDate: '2026-09-27',
+    })
+    const [kept] = startDay([waiting], TODAY)
+    expect(kept).toMatchObject({ status: 'waiting', plannedDate: TODAY, carriedOn: null, rolloverCount: 0 })
+    expect(startDay([kept], TODAY)).toEqual([])
+  })
+
+  it('startDay brings postponed loops back on their day without counting again', () => {
+    const postponed = postponeToTomorrow(plan('p', 'today', yesterday), yesterday)
+    expect(startDay([postponed], '2026-09-23')).toEqual([])
+    const [back] = startDay([postponed], TODAY)
+    expect(back).toMatchObject({ horizon: 'today', plannedDate: TODAY, carriedOn: null, rolloverCount: 1 })
+  })
+
+  it('startDay leaves closed, current, future and unplanned loops alone', () => {
+    const closed = setStatus(plan('closed', 'today', yesterday), 'done', yesterday)
+    const current = plan('current', 'today')
+    const future = { ...plan('future', 'week'), plannedDate: '2026-09-30' }
+    const unplanned = plan('unplanned', 'week')
+    expect(startDay([closed, current, future, unplanned], TODAY)).toEqual([])
+  })
+
+  it('reopening a closed loop in today does not count as a carry-over', () => {
+    const done = setStatus(plan('a', 'today', yesterday), 'done', yesterday)
+    const reopened = setStatus(done, 'active', today)
+    expect(reopened.plannedDate).toBe(TODAY)
+    expect(startDay([reopened], TODAY)).toEqual([])
   })
 })

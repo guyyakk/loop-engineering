@@ -3,7 +3,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CaptureForm } from './components/CaptureForm'
 import { Icon, Logo } from './components/Icon'
 import { LoopCard } from './components/LoopCard'
-import { allLoops, saveLoop } from './db'
+import { TodayPanel } from './components/TodayPanel'
+import {
+  allLoops,
+  getMeetingMinutes,
+  getSettings,
+  rollOverDay,
+  saveLoop,
+  saveLoops,
+  saveMeetingMinutes,
+  saveSettings,
+} from './db'
+import { DEFAULT_SETTINGS, computeDayLoad } from './domain/capacity'
 import { formatLongDay, toDateKey } from './domain/dates'
 import {
   HORIZON_LABEL,
@@ -13,6 +24,7 @@ import {
   emptyDraft,
   groupLoops,
   isClosed,
+  postponeToTomorrow,
   projectsOf,
   type Horizon,
   type Loop,
@@ -20,7 +32,8 @@ import {
 } from './domain/loop'
 
 type Editing = { mode: 'create'; draft: LoopDraft } | { mode: 'edit'; loop: Loop }
-type Toast = { message: string; undo: Loop }
+/** undo เก็บสภาพก่อนเปลี่ยนของทุกลูปที่ถูกแก้ในครั้งนั้น */
+type Toast = { message: string; undo: Loop[] }
 
 /** date key ของวันนี้ ที่อัปเดตเองเมื่อกลับมาเปิดแอปข้ามวัน */
 function useToday(): string {
@@ -46,14 +59,25 @@ function isTyping(target: EventTarget | null): boolean {
 export function App() {
   const loops = useLiveQuery(() => allLoops(), [])
   const today = useToday()
+  const settings = useLiveQuery(() => getSettings(), []) ?? DEFAULT_SETTINGS
+  const meetingMinutes = useLiveQuery(() => getMeetingMinutes(today), [today]) ?? 0
   const [editing, setEditing] = useState<Editing | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
 
   const groups = useMemo(() => groupLoops(loops ?? []), [loops])
   const projects = useMemo(() => projectsOf(loops ?? []), [loops])
+  const load = useMemo(
+    () => computeDayLoad(loops ?? [], today, settings, meetingMinutes),
+    [loops, today, settings, meetingMinutes],
+  )
   const openCount = groups.today.length + groups.week.length + groups.later.length
   const waitingCount = (loops ?? []).filter((l) => l.status === 'waiting').length
+
+  // เปิดแอปหรือข้ามเที่ยงคืน: ยกงานที่ค้างเข้าวันนี้
+  useEffect(() => {
+    void rollOverDay(today)
+  }, [today])
 
   const openCapture = useCallback((horizon: Horizon = 'week') => {
     setEditing({ mode: 'create', draft: emptyDraft(horizon) })
@@ -97,17 +121,29 @@ export function App() {
   async function handleChange(next: Loop, prev: Loop) {
     await saveLoop(next)
     if (isClosed(next) && !isClosed(prev)) {
-      setToast({ message: `${next.status === 'done' ? 'ปิดลูป' : 'ทิ้ง'} "${next.title}" แล้ว`, undo: prev })
+      setToast({ message: `${next.status === 'done' ? 'ปิดลูป' : 'ทิ้ง'} "${next.title}" แล้ว`, undo: [prev] })
     }
+  }
+
+  async function postpone(targets: Loop[]) {
+    const now = new Date()
+    await saveLoops(targets.map((l) => postponeToTomorrow(l, now)))
+    const what = targets.length === 1 ? `"${targets[0].title}"` : `${targets.length} งาน`
+    setToast({ message: `เลื่อน ${what} ไปพรุ่งนี้แล้ว`, undo: targets })
   }
 
   async function undo() {
     if (!toast) return
-    await saveLoop(toast.undo)
+    await saveLoops(toast.undo)
     setToast(null)
   }
 
-  const sectionProps = { today, onChange: handleChange, onEdit: (loop: Loop) => setEditing({ mode: 'edit', loop }) }
+  const sectionProps = {
+    today,
+    onChange: handleChange,
+    onEdit: (loop: Loop) => setEditing({ mode: 'edit', loop }),
+    onPostpone: (loop: Loop) => postpone([loop]),
+  }
 
   return (
     <div className="app">
@@ -130,6 +166,18 @@ export function App() {
           {waitingCount > 0 && <> · รอคนอื่น {waitingCount}</>}
           {groups.closed.length > 0 && <> · ปิดแล้ว {groups.closed.length}</>}
         </p>
+      )}
+
+      {loops && loops.length > 0 && (
+        <TodayPanel
+          load={load}
+          today={today}
+          settings={settings}
+          hasTodayLoops={groups.today.length > 0}
+          onMeetingChange={(minutes) => void saveMeetingMinutes(today, minutes)}
+          onSettingsChange={(next) => void saveSettings(next)}
+          onPostpone={postpone}
+        />
       )}
 
       {loops && loops.length === 0 && (

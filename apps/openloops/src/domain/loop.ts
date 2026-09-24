@@ -1,4 +1,4 @@
-import type { DateKey } from './dates'
+import { addDays, toDateKey, type DateKey } from './dates'
 
 // "ลูป" คืองานหนึ่งชิ้นที่อาจมีหลายขั้น ลูปจะไม่หายไปเอง
 // ต้องจบด้วยสถานะ done หรือ dropped อย่างตั้งใจเท่านั้น
@@ -29,7 +29,12 @@ export interface Loop {
   updatedAt: string
   lastProgressAt: string
   closedAt: string | null
+  /** จำนวนครั้งที่ถูกเลื่อนหรือยกข้ามวัน */
   rolloverCount: number
+  /** วันที่วางแผนจะทำ: ลูปในกลุ่มวันนี้คือวันที่ถูกใส่เข้าวันนี้, ลูปที่เลื่อนไว้คือวันที่จะกลับเข้าวันนี้ */
+  plannedDate: DateKey | null
+  /** วันที่ถูกยกมาจากวันก่อนโดยอัตโนมัติ */
+  carriedOn: DateKey | null
 }
 
 export interface LoopDraft {
@@ -139,13 +144,15 @@ export function createLoop(draft: LoopDraft, now: Date, id: string = newId()): L
     lastProgressAt: ts,
     closedAt: null,
     rolloverCount: 0,
+    plannedDate: draft.horizon === 'today' ? toDateKey(now) : null,
+    carriedOn: null,
   }
 }
 
 /** แก้รายละเอียดจากฟอร์ม โดยไม่แตะสถานะและประวัติการขยับของลูป */
 export function applyDraft(loop: Loop, draft: LoopDraft, now: Date): Loop {
   if (!isValidDraft(draft)) throw new Error('applyDraft: draft is invalid')
-  return { ...loop, ...draftFields(draft), updatedAt: now.toISOString() }
+  return { ...setHorizon(loop, draft.horizon, now), ...draftFields(draft), updatedAt: now.toISOString() }
 }
 
 export function isClosed(loop: Loop): boolean {
@@ -177,7 +184,7 @@ export function toggleStep(loop: Loop, stepId: string, now: Date): Loop {
     if (steps.every((s) => s.doneAt)) return close(next, 'done', ts)
     return next
   }
-  return loop.status === 'done' ? reopen(next) : next
+  return loop.status === 'done' ? revive(next, 'active', now) : next
 }
 
 /** ปุ่มลัดบนการ์ด: ติ๊กขั้นถัดไป หรือปิดลูปถ้าไม่มีขั้นเหลือ */
@@ -210,26 +217,80 @@ export function setStatus(loop: Loop, status: LoopStatus, now: Date, waiting?: W
     followUpDate: status === 'waiting' ? waiting!.followUpDate : null,
   }
   if (status === 'done' || status === 'dropped') return close(base, status, ts)
-  return reopen(base)
+  return isClosed(loop) ? revive(base, status, now) : base
 }
 
 export function setHorizon(loop: Loop, horizon: Horizon, now: Date): Loop {
-  return { ...loop, horizon, updatedAt: now.toISOString() }
+  if (horizon === loop.horizon) return { ...loop, updatedAt: now.toISOString() }
+  return {
+    ...loop,
+    horizon,
+    plannedDate: horizon === 'today' ? toDateKey(now) : null,
+    carriedOn: null,
+    updatedAt: now.toISOString(),
+  }
+}
+
+export function setEstimate(loop: Loop, estimateMinutes: number | null, now: Date): Loop {
+  return { ...loop, estimateMinutes, updatedAt: now.toISOString() }
+}
+
+/** ย้ายออกจากวันนี้ไปทำพรุ่งนี้ นับเป็นการเลื่อนหนึ่งครั้ง พอถึงวันนั้น startDay จะดึงกลับเข้าวันนี้เอง */
+export function postponeToTomorrow(loop: Loop, now: Date): Loop {
+  return {
+    ...loop,
+    horizon: 'week',
+    plannedDate: addDays(toDateKey(now), 1),
+    carriedOn: null,
+    rolloverCount: loop.rolloverCount + 1,
+    updatedAt: now.toISOString(),
+  }
+}
+
+/**
+ * งานเปิดวันใหม่: คืนเฉพาะลูปที่เปลี่ยน
+ * - ลูปในวันนี้ที่ค้างจากวันก่อน ถูกยกมาและนับการเลื่อน +1
+ *   ยกเว้นลูปที่รอคนอื่น ซึ่งยกมาเฉย ๆ ไม่นับ เพราะผู้ใช้ไม่ได้เป็นคนเลื่อน
+ * - ลูปที่วางแผนไว้ถึงวันนี้แล้ว ถูกดึงเข้าวันนี้ (นับไปแล้วตอนกดเลื่อน)
+ * รันซ้ำในวันเดียวกันต้องไม่เปลี่ยนอะไรเพิ่ม
+ */
+export function startDay(loops: Loop[], today: DateKey): Loop[] {
+  const changed: Loop[] = []
+  for (const loop of loops) {
+    if (isClosed(loop)) continue
+    if (loop.horizon === 'today') {
+      if (!loop.plannedDate || (loop.plannedDate < today && loop.status === 'waiting')) {
+        changed.push({ ...loop, plannedDate: today })
+      } else if (loop.plannedDate < today) {
+        changed.push({ ...loop, plannedDate: today, carriedOn: today, rolloverCount: loop.rolloverCount + 1 })
+      }
+    } else if (loop.plannedDate && loop.plannedDate <= today) {
+      changed.push({ ...loop, horizon: 'today', plannedDate: today, carriedOn: null })
+    }
+  }
+  return changed
 }
 
 export function addStep(loop: Loop, title: string, now: Date): Loop {
   if (!title.trim()) return loop
   const next = { ...loop, steps: [...loop.steps, newStep(title)], updatedAt: now.toISOString() }
   // เพิ่มขั้นใหม่ให้ลูปที่เสร็จแล้ว แปลว่างานยังไม่จบจริง
-  return loop.status === 'done' ? { ...next, status: 'active', closedAt: null } : next
+  return loop.status === 'done' ? revive(next, 'active', now) : next
 }
 
 function close(loop: Loop, status: 'done' | 'dropped', ts: string): Loop {
   return { ...loop, status, closedAt: ts, waitingOn: null, followUpDate: null }
 }
 
-function reopen(loop: Loop): Loop {
-  return { ...loop, status: isClosed(loop) ? 'active' : loop.status, closedAt: null }
+/** เปิดลูปที่ปิดไปแล้วกลับมา ถ้าอยู่ในกลุ่มวันนี้ให้นับเป็นงานของวันนี้ ไม่ใช่งานยกมา */
+function revive(loop: Loop, status: LoopStatus, now: Date): Loop {
+  return {
+    ...loop,
+    status,
+    closedAt: null,
+    plannedDate: loop.horizon === 'today' ? toDateKey(now) : loop.plannedDate,
+    carriedOn: null,
+  }
 }
 
 export type Section = Horizon | 'closed'

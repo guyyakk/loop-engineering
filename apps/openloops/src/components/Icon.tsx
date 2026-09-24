@@ -10,6 +10,10 @@ const PATHS = {
   folder: 'M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2',
   bolt: 'M13 3L4 14h7l-1 7 9-11h-7l1-7z',
   undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
+  settings: 'M4 6h16M4 12h16M4 18h16M9 4v4M15 10v4M7 16v4',
+  alert: 'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  arrow: 'M5 12h14M13 6l6 6-6 6',
+  repeat: 'M4 12V9a3 3 0 0 1 3-3h13M17 3l3 3-3 3M20 12v3a3 3 0 0 1-3 3H4M7 21l-3-3 3-3',
 } as const
 
 export type IconName = keyof typeof PATHS

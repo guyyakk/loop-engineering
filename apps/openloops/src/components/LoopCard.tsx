@@ -1,37 +1,51 @@
 import { useId, useState } from 'react'
+import { remainingMinutes } from '../domain/capacity'
 import { addDays, dueTone, formatMinutes, nextWeekday, withDay, type DateKey } from '../domain/dates'
 import {
   ENERGY_LABEL,
-  HORIZON_LABEL,
   STATUS_LABEL,
   addStep,
   advance,
   isClosed,
   nextStep,
   progress,
+  setEstimate,
   setHorizon,
   setStatus,
   toggleStep,
   validateWaiting,
-  type Horizon,
   type Loop,
   type LoopStatus,
 } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
+import { ESTIMATE_OPTIONS, HORIZON_OPTIONS } from './options'
 
 interface Props {
   loop: Loop
   today: DateKey
   onChange: (next: Loop, prev: Loop) => void
   onEdit: (loop: Loop) => void
+  onPostpone: (loop: Loop) => void
 }
 
 const STATUSES: LoopStatus[] = ['active', 'waiting', 'blocked', 'done', 'dropped']
-const HORIZONS: ChipOption<Horizon>[] = (['today', 'week', 'later'] as const).map((h) => ({
-  value: h,
-  label: HORIZON_LABEL[h],
-}))
+
+/** "ยกมาจากเมื่อวาน" สำหรับการยกครั้งแรกของวันนี้ ไม่เช่นนั้นบอกจำนวนครั้งที่เลื่อน */
+function rolloverLabel(loop: Loop, today: DateKey): string | null {
+  if (loop.rolloverCount === 0) return null
+  if (loop.rolloverCount === 1 && loop.carriedOn === today) return 'ยกมาจากเมื่อวาน'
+  return `เลื่อนมา ${loop.rolloverCount} ครั้ง`
+}
+
+function estimateText(loop: Loop, closed: boolean): string | null {
+  if (loop.estimateMinutes === null) return null
+  const left = remainingMinutes(loop)
+  if (!closed && left !== null && left < loop.estimateMinutes) {
+    return `เหลือ ${formatMinutes(left)} จาก ${formatMinutes(loop.estimateMinutes)}`
+  }
+  return formatMinutes(loop.estimateMinutes)
+}
 
 export function Dots({ done, total }: { done: number; total: number }) {
   if (total === 0) return null
@@ -51,7 +65,7 @@ export function Dots({ done, total }: { done: number; total: number }) {
   )
 }
 
-export function LoopCard({ loop, today, onChange, onEdit }: Props) {
+export function LoopCard({ loop, today, onChange, onEdit, onPostpone }: Props) {
   const [open, setOpen] = useState(false)
   const [newStepText, setNewStepText] = useState('')
   const [waitingDraft, setWaitingDraft] = useState<{ waitingOn: string; followUpDate: DateKey | null } | null>(null)
@@ -62,6 +76,9 @@ export function LoopCard({ loop, today, onChange, onEdit }: Props) {
   const { done, total } = progress(loop)
   const next = nextStep(loop)
   const change = (updated: Loop) => onChange(updated, loop)
+  const rollover = closed ? null : rolloverLabel(loop, today)
+  const estimate = estimateText(loop, closed)
+  const plannedAhead = !closed && loop.horizon !== 'today' && loop.plannedDate && loop.plannedDate > today ? loop.plannedDate : null
 
   const followUpOptions = (
     [
@@ -146,21 +163,31 @@ export function LoopCard({ loop, today, onChange, onEdit }: Props) {
                 <Icon name="flag" size={12} /> {withDay('ส่ง', loop.dueDate, today)}
               </span>
             )}
+            {plannedAhead && (
+              <span className="badge tone-info">
+                <Icon name="arrow" size={12} /> {withDay('ทำ', plannedAhead, today)}
+              </span>
+            )}
+            {rollover && (
+              <span className={`badge ${loop.rolloverCount >= 3 ? 'tone-warn' : ''}`}>
+                <Icon name="repeat" size={12} /> {rollover}
+              </span>
+            )}
           </span>
           <span className="loop-sub">
             {loop.status !== 'waiting' && !closed && <Dots done={done} total={total} />}
             <span className="loop-sub-text">{subline}</span>
           </span>
-          {(loop.project || loop.estimateMinutes || loop.energy) && (
+          {(loop.project || estimate || loop.energy) && (
             <span className="loop-meta">
               {loop.project && (
                 <span>
                   <Icon name="folder" size={12} /> {loop.project}
                 </span>
               )}
-              {loop.estimateMinutes && (
+              {estimate && (
                 <span>
-                  <Icon name="clock" size={12} /> {formatMinutes(loop.estimateMinutes)}
+                  <Icon name="clock" size={12} /> {estimate}
                 </span>
               )}
               {loop.energy && (
@@ -285,10 +312,22 @@ export function LoopCard({ loop, today, onChange, onEdit }: Props) {
 
           {!closed && (
             <div className="field">
+              <span className="field-label">ใช้เวลาประมาณ</span>
+              <Chips
+                label="ใช้เวลาประมาณ"
+                options={ESTIMATE_OPTIONS}
+                value={loop.estimateMinutes}
+                onChange={(m) => change(setEstimate(loop, m, new Date()))}
+              />
+            </div>
+          )}
+
+          {!closed && (
+            <div className="field">
               <span className="field-label">ทำเมื่อไหร่</span>
               <Chips
                 label="ทำเมื่อไหร่"
-                options={HORIZONS}
+                options={HORIZON_OPTIONS}
                 value={loop.horizon}
                 onChange={(h) => change(setHorizon(loop, h, new Date()))}
               />
@@ -296,6 +335,11 @@ export function LoopCard({ loop, today, onChange, onEdit }: Props) {
           )}
 
           <div className="row-end">
+            {!closed && loop.horizon === 'today' && (
+              <button type="button" onClick={() => onPostpone(loop)}>
+                <Icon name="arrow" /> เลื่อนไปพรุ่งนี้
+              </button>
+            )}
             <button type="button" onClick={() => onEdit(loop)}>
               <Icon name="edit" /> แก้ไขรายละเอียด
             </button>

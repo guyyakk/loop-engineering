@@ -1,6 +1,6 @@
 # Epic: OpenLoops — planner ที่ไม่ยอมให้งานค้างกลางทาง (ร่าง)
 
-> สถานะ: **กำลังทำ** — spec 1 เสร็จ รอผู้ใช้ตรวจ — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
+> สถานะ: **กำลังทำ** — spec 1–2 เสร็จ — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
 
 ## Outcome
 
@@ -42,7 +42,7 @@
 | # | ชื่อไฟล์ที่วางไว้ | ขอบเขต | เฟส |
 | --- | --- | --- | --- |
 | 1 | [`2026-09-24-openloops-1-capture-and-loops.md`](2026-09-24-openloops-1-capture-and-loops.md) ✅ | โครงข้อมูล, ฟอร์มจดเร็ว, รายการลูปพร้อมขั้น, เก็บข้อมูลในเครื่อง | MVP |
-| 2 | `...-openloops-2-today-view.md` | หน้าวันนี้, แถบเวลาว่าง, งานยกมาจากเมื่อวาน | MVP |
+| 2 | [`2026-09-24-openloops-2-today-view.md`](2026-09-24-openloops-2-today-view.md) ✅ | หน้าวันนี้, แถบเวลาว่าง, งานยกมาจากเมื่อวาน | MVP |
 | 3 | `...-openloops-3-week-board.md` | หน้าสัปดาห์นี้, ลากงานลงวัน, ภาระงานรายวัน | MVP |
 | 4 | `...-openloops-4-nudge-engine.md` | กฎการเตือนข้างบน และ notification | MVP |
 | 5 | `...-openloops-5-rituals.md` | ปิดวัน และทบทวนสัปดาห์แบบ wizard | MVP |

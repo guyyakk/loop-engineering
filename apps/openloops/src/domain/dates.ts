@@ -9,6 +9,11 @@ export function toDateKey(d: Date): DateKey {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** วันตามเวลาท้องถิ่นของ timestamp แบบ ISO */
+export function dateKeyOf(iso: string): DateKey {
+  return toDateKey(new Date(iso))
+}
+
 export function fromDateKey(key: DateKey): Date {
   const [y, m, d] = key.split('-').map(Number)
   return new Date(y, m - 1, d)

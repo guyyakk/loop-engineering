@@ -24,7 +24,7 @@ npm run build
 
 ## โครงสร้าง
 
-- `src/domain/` — กติกาของลูป (สร้าง, ติ๊กขั้น, เปลี่ยนสถานะ, จัดกลุ่ม) และวันที่ เป็นฟังก์ชันล้วน มี test
-- `src/db.ts` — Dexie/IndexedDB
+- `src/domain/` — กติกาของลูป (สร้าง, ติ๊กขั้น, เปลี่ยนสถานะ, เลื่อน, ยกข้ามวัน), เวลาว่างของวัน (`capacity.ts`) และวันที่ เป็นฟังก์ชันล้วน มี test
+- `src/db.ts` — Dexie/IndexedDB (v2: loops, days, settings)
 - `src/components/` — ฟอร์มจดงาน, การ์ดลูป, ปุ่มตัวเลือก
 - `scripts/make-icons.mjs` — สร้างไอคอน PNG ของ PWA (`npm run icons`)

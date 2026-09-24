@@ -522,7 +522,8 @@ input.chip-date {
 }
 
 .due-today,
-.due-soon {
+.due-soon,
+.tone-warn {
   background: var(--warn-soft);
   color: var(--warn);
 }
@@ -598,6 +599,207 @@ input.chip-date {
   padding: 14px;
   border-radius: var(--radius);
   background: var(--info-soft);
+}
+
+/* ---------- today panel ---------- */
+
+.today-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px 18px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.tp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tp-head button {
+  font-size: 13px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metric {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.metric-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.metric-value {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.tone-over .metric-value.planned {
+  color: var(--danger);
+}
+
+.cap {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.cap-track {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.seg {
+  display: block;
+  height: 100%;
+  flex: none;
+  transition: width 0.25s ease-out;
+}
+
+.seg-meeting {
+  background: var(--text-3);
+}
+
+.seg-buffer {
+  background: var(--border-strong);
+}
+
+.seg-planned {
+  background: var(--accent);
+}
+
+.tone-tight .seg-planned {
+  background: var(--warn);
+}
+
+.seg-over {
+  background: var(--danger);
+}
+
+.cap-end {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 18px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+.cap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.cap-legend .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 50%;
+  vertical-align: 0;
+}
+
+.tp-msg {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.tone-ok .tp-msg {
+  color: var(--ok);
+}
+
+.tone-tight .tp-msg {
+  color: var(--warn);
+}
+
+.tone-over .tp-msg {
+  color: var(--danger);
+}
+
+.tone-empty .tp-msg {
+  color: var(--text-2);
+}
+
+.tp-notes {
+  margin: -6px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.suggest {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+}
+
+.suggest-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.suggest ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.suggest li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.suggest-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggest li button {
+  flex: none;
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.tp-settings {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 
 /* ---------- capture sheet ---------- */
@@ -755,6 +957,18 @@ dialog.sheet::backdrop {
 
   .loop-body {
     padding-left: 16px;
+  }
+
+  .today-panel {
+    padding: 14px;
+  }
+
+  .metric {
+    padding: 8px 10px;
+  }
+
+  .metric-value {
+    font-size: 17px;
   }
 }
 
