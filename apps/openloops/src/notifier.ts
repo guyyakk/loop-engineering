@@ -15,7 +15,7 @@ export async function requestPermission(): Promise<PermissionState> {
   return Notification.requestPermission()
 }
 
-export async function showNotification(message: NotifyMessage, tag: string): Promise<boolean> {
+export async function showNotification(message: NotifyMessage, tag: string, url: string): Promise<boolean> {
   if (permissionState() !== 'granted') return false
   const options: NotificationOptions = {
     body: message.body,
@@ -23,7 +23,7 @@ export async function showNotification(message: NotifyMessage, tag: string): Pro
     icon: '/pwa-192.png',
     badge: '/pwa-192.png',
     lang: 'th',
-    data: { url: '/' },
+    data: { url },
   }
   const registration = await navigator.serviceWorker?.getRegistration()
   if (registration) {

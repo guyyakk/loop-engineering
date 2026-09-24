@@ -28,6 +28,7 @@ interface Props {
   onOpen: (loop: Loop) => void
   onMove: (loop: Loop, target: PlanValue) => void
   onMeetingChange: (date: DateKey, minutes: number) => void
+  onReview: () => void
 }
 
 function weekTitle(offset: number): string {
@@ -98,7 +99,18 @@ function BoardCard({
   )
 }
 
-export function WeekBoard({ plan, today, settings, weekStart, weekOffset, onWeekOffset, onOpen, onMove, onMeetingChange }: Props) {
+export function WeekBoard({
+  plan,
+  today,
+  settings,
+  weekStart,
+  weekOffset,
+  onWeekOffset,
+  onOpen,
+  onMove,
+  onMeetingChange,
+  onReview,
+}: Props) {
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<PlanValue | null>(null)
   const [meetingDay, setMeetingDay] = useState<DateKey | null>(null)
@@ -242,6 +254,9 @@ export function WeekBoard({ plan, today, settings, weekStart, weekOffset, onWeek
             <Icon name="chevron" size={18} />
           </button>
         </div>
+        <button type="button" className="week-review" onClick={onReview}>
+          <Icon name="repeat" /> ทบทวนสัปดาห์
+        </button>
         <p className={`week-sum tone-${weekTone}`}>
           วางงานไว้ <strong>{formatMinutes(plan.plannedMinutes)}</strong> จากเวลาว่าง {formatMinutes(plan.freeMinutes)}
           <span className="muted"> {weekOffset === 0 ? '(วันนี้ถึงอาทิตย์)' : '(ทั้งสัปดาห์)'}</span>

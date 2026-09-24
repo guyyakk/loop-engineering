@@ -5,6 +5,8 @@ import {
   allLoops,
   getMeetingMinutes,
   claimNotification,
+  commitRitual,
+  getDays,
   getMeetings,
   getSent,
   getSettings,
@@ -13,6 +15,7 @@ import {
   saveLoop,
   saveMeetingMinutes,
   saveSettings,
+  undoRitual,
 } from './db'
 import { DEFAULT_SETTINGS } from './domain/capacity'
 import { toDateKey } from './domain/dates'
@@ -107,6 +110,31 @@ describe('db', () => {
     expect(await getMeetingMinutes('2026-09-24', db)).toBe(60)
     await saveMeetingMinutes('2026-09-24', 90, db)
     expect(Object.keys(await getSent('2026-09-24', db)).sort()).toEqual(['brief', 'shutdown'])
+    db.close()
+  })
+
+  it('commits a ritual atomically and can undo it, including the day row', async () => {
+    const db = openDb(uniqueName())
+    const loop = createLoop({ ...emptyDraft('today'), title: 'ทำต่อ' }, new Date(2026, 8, 24, 9))
+    await saveLoop(loop, db)
+    await saveMeetingMinutes('2026-09-24', 60, db)
+
+    const carried = { ...loop, horizon: 'week' as const, plannedDate: '2026-09-25', rolloverCount: 1 }
+    const before = await commitRitual('2026-09-24', [carried], { shutdownAt: 'T17', note: 'พรุ่งนี้โทรหาลูกค้า' }, db)
+    expect(before).toMatchObject({ date: '2026-09-24', meetingMinutes: 60 })
+    expect((await allLoops(db))[0]).toMatchObject({ plannedDate: '2026-09-25', rolloverCount: 1 })
+    expect((await getDays('2026-09-24', '2026-09-24', db))[0]).toMatchObject({ meetingMinutes: 60, shutdownAt: 'T17', note: 'พรุ่งนี้โทรหาลูกค้า' })
+
+    await undoRitual('2026-09-24', [loop], before, db)
+    expect((await allLoops(db))[0]).toMatchObject({ horizon: 'today', rolloverCount: 0 })
+    const [day] = await getDays('2026-09-24', '2026-09-24', db)
+    expect(day.shutdownAt).toBeUndefined()
+    expect(day.meetingMinutes).toBe(60)
+
+    // วันที่ไม่เคยมีแถวมาก่อน เลิกทำแล้วต้องไม่เหลือแถวค้าง
+    const none = await commitRitual('2026-09-26', [], { reviewAt: 'T' }, db)
+    await undoRitual('2026-09-26', [], none, db)
+    expect(await getDays('2026-09-26', '2026-09-26', db)).toEqual([])
     db.close()
   })
 })

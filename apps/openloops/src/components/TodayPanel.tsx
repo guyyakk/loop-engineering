@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { remainingMinutes, suggestPostpone, type DayLoad, type PlannerSettings } from '../domain/capacity'
 import { WEEKDAY_SHORT, formatMinutes, withDay, type DateKey } from '../domain/dates'
+import { formatClock } from '../domain/nudges'
 import type { Loop } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
@@ -13,10 +14,17 @@ interface Props {
   hasTodayLoops: boolean
   /** วันทำงานถัดไป ที่ปุ่มเลื่อนจะส่งงานไป */
   postponeDate: DateKey
+  /** เวลาที่ปิดวันของวันนี้ ถ้าปิดแล้ว */
+  shutdownAt?: string
   onMeetingChange: (minutes: number) => void
   onSettingsChange: (settings: PlannerSettings) => void
   onPostpone: (loops: Loop[]) => void
   onTestNotification: () => void
+}
+
+const minutesOf = (iso: string) => {
+  const d = new Date(iso)
+  return d.getHours() * 60 + d.getMinutes()
 }
 
 const hours = (h: number[]) => h.map((x) => ({ value: x * 60, label: formatMinutes(x * 60) }))
@@ -94,6 +102,7 @@ export function TodayPanel({
   settings,
   hasTodayLoops,
   postponeDate,
+  shutdownAt,
   onMeetingChange,
   onSettingsChange,
   onPostpone,
@@ -109,6 +118,9 @@ export function TodayPanel({
     <section className={`today-panel tone-${load.tone}`} aria-labelledby={`${ids}-h`}>
       <div className="tp-head">
         <h2 id={`${ids}-h`}>เวลาของวันนี้</h2>
+        <a className="button tp-shutdown" href="#shutdown">
+          <Icon name="check" /> {shutdownAt ? `ปิดวันแล้ว ${formatClock(minutesOf(shutdownAt))}` : 'ปิดวัน'}
+        </a>
         <button
           type="button"
           className="ghost"

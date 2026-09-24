@@ -115,7 +115,8 @@ input {
   color: inherit;
 }
 
-button {
+button,
+a.button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -129,8 +130,15 @@ button {
   transition: background 0.12s, border-color 0.12s, transform 0.06s;
 }
 
-button:hover {
+button:hover,
+a.button:hover {
   background: var(--surface-2);
+}
+
+a.button {
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 button:active {
@@ -171,7 +179,20 @@ input:not([type='checkbox']) {
   font-size: 15px;
 }
 
-input::placeholder {
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+
+input::placeholder,
+textarea::placeholder {
   color: var(--text-3);
 }
 
@@ -959,6 +980,251 @@ input.chip-date {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* ---------- rituals ---------- */
+
+.tp-shutdown {
+  margin-left: auto;
+  min-height: 32px;
+  font-size: 13px;
+}
+
+.ritual-prompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  font-size: 14px;
+}
+
+.ritual {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.ritual-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ritual-head h2 {
+  font-size: 19px;
+}
+
+.ritual-head h2:focus {
+  outline: none;
+}
+
+.ritual-kicker {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.ritual-steps {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.ritual-steps li {
+  flex: 1;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 3px solid var(--border-strong);
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ritual-steps li[data-done='true'] {
+  border-color: var(--accent);
+  color: var(--text-2);
+}
+
+.ritual-steps li[aria-current='step'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.ritual-body {
+  display: grid;
+  gap: 12px;
+}
+
+.ritual-lead {
+  font-size: 15px;
+  color: var(--text-2);
+}
+
+.ritual-empty {
+  padding: 14px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+.ritual-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ritual-item[data-chronic='true'] {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.ri-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.ri-title {
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.ri-ask {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--warn);
+}
+
+.ri-closed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ok);
+}
+
+.ri-steps summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.ri-steps ul {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ri-steps label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ri-steps label.is-done span {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+.decision {
+  display: grid;
+  gap: 10px;
+}
+
+.ritual-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+}
+
+.ritual-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ritual-counts li {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 14px;
+}
+
+.ritual-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.strip-day {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.strip-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.strip-load {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.strip-day.tone-over .strip-load {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.strip-day .cap-track {
+  height: 6px;
+}
+
+.week-review {
+  min-height: 32px;
+  font-size: 13px;
 }
 
 /* ---------- week board ---------- */

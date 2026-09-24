@@ -3,12 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { CaptureForm } from './components/CaptureForm'
 import { Icon, Logo } from './components/Icon'
 import { LoopCard } from './components/LoopCard'
+import { ShutdownWizard, type RitualResult } from './components/ShutdownWizard'
 import { Attention } from './components/Attention'
 import { TodayPanel } from './components/TodayPanel'
 import { WeekBoard } from './components/WeekBoard'
+import { WeeklyReview } from './components/WeeklyReview'
 import {
   allLoops,
   claimNotification,
+  commitRitual,
+  getDays,
   getMeetingMinutes,
   getMeetings,
   getSent,
@@ -18,6 +22,8 @@ import {
   saveLoops,
   saveMeetingMinutes,
   saveSettings,
+  undoRitual,
+  type DayPlan,
 } from './db'
 import { DEFAULT_SETTINGS, buildWeek, computeDayLoad, type Particle } from './domain/capacity'
 import { addDays, formatLongDay, nextWorkday, startOfWeek, toDateKey, withDay } from './domain/dates'
@@ -39,12 +45,15 @@ import {
   type PlanValue,
 } from './domain/loop'
 import { briefMessage, nudgesFor, pendingNotifications, shutdownMessage } from './domain/nudges'
+import { reviewDue } from './domain/rituals'
 import { permissionState, showNotification } from './notifier'
 
 type Editing = { mode: 'create'; draft: LoopDraft } | { mode: 'edit'; loop: Loop }
-/** undo เก็บสภาพก่อนเปลี่ยนของทุกลูปที่ถูกแก้ในครั้งนั้น */
-type Toast = { message: string; undo: Loop[] }
-type View = 'today' | 'week'
+/** undo เก็บสภาพก่อนเปลี่ยนของทุกลูปที่ถูกแก้ในครั้งนั้น และข้อมูลของวันถ้าเป็นพิธีปิดวัน/ทบทวน */
+type Toast = { message: string; undo: Loop[]; day?: { date: string; before: DayPlan | undefined } }
+type View = 'today' | 'week' | 'shutdown' | 'review'
+
+const VIEWS: Record<string, View> = { '#week': 'week', '#shutdown': 'shutdown', '#review': 'review' }
 
 /** date key ของวันนี้ ที่อัปเดตเองเมื่อกลับมาเปิดแอปข้ามวัน */
 function useToday(): string {
@@ -65,7 +74,7 @@ function useToday(): string {
 
 /** มุมมองอยู่ใน URL (#week) กด back ได้และเปิดตรงจากลิงก์ได้ */
 function useView(): View {
-  const read = (): View => (window.location.hash === '#week' ? 'week' : 'today')
+  const read = (): View => VIEWS[window.location.hash] ?? 'today'
   const [view, setView] = useState<View>(read)
   useEffect(() => {
     const onHash = () => setView(read())
@@ -109,6 +118,8 @@ export function App() {
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = addDays(startOfWeek(today), weekOffset * 7)
   const meetings = useLiveQuery(() => getMeetings(weekStart, addDays(weekStart, 6)), [weekStart])
+  const thisWeek = startOfWeek(today)
+  const weekRows = useLiveQuery(() => getDays(thisWeek, addDays(thisWeek, 6)), [thisWeek])
   const [editing, setEditing] = useState<Editing | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set())
@@ -129,6 +140,9 @@ export function App() {
   const nudges = useMemo(() => nudgesFor(loops ?? [], today, settings), [loops, today, settings])
   const postponeDate = nextWorkday(today, settings.workdays)
   const detail = detailId ? (loops ?? []).find((l) => l.id === detailId) ?? null : null
+  const shutdownAt = weekRows?.find((d) => d.date === today)?.shutdownAt
+  const shutdownDates = (weekRows ?? []).filter((d) => d.shutdownAt).map((d) => d.date)
+  const showReviewPrompt = weekRows !== undefined && reviewDue(today, settings, (weekRows ?? []).filter((d) => d.reviewAt).map((d) => d.date))
   const openCount = groups.today.length + groups.week.length + groups.later.length
   const waitingCount = (loops ?? []).filter((l) => l.status === 'waiting').length
 
@@ -157,7 +171,7 @@ export function App() {
         if (!(await claimNotification(date, kind))) continue
         const { load: dayLoad, nudges: dayNudges, openToday } = latest.current
         const message = kind === 'brief' ? briefMessage(dayLoad, dayNudges) : shutdownMessage(openToday)
-        await showNotification(message, `openloops-${kind}-${date}`)
+        await showNotification(message, `openloops-${kind}-${date}`, kind === 'shutdown' ? '/#shutdown' : '/')
       }
     }
     void tick()
@@ -172,7 +186,7 @@ export function App() {
   }, [notifyOn, loopsReady])
 
   async function testNotification() {
-    const shown = await showNotification(briefMessage(load, nudges), 'openloops-test')
+    const shown = await showNotification(briefMessage(load, nudges), 'openloops-test', '/')
     setToast({ message: shown ? 'ส่งแจ้งเตือนทดสอบแล้ว' : 'ยังไม่ได้รับสิทธิ์แจ้งเตือนจาก browser', undo: [] })
   }
 
@@ -196,7 +210,8 @@ export function App() {
 
   useEffect(() => {
     if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 6000)
+    // หลังพิธีปิดวัน/ทบทวน ให้เวลาเลิกทำนานกว่าการแก้ทีละงาน
+    const timer = window.setTimeout(() => setToast(null), toast.day ? 15_000 : 6000)
     return () => window.clearTimeout(timer)
   }, [toast])
 
@@ -230,9 +245,33 @@ export function App() {
 
   async function undo() {
     if (!toast) return
-    await saveLoops(toast.undo)
+    if (toast.day) await undoRitual(toast.day.date, toast.undo, toast.day.before)
+    else await saveLoops(toast.undo)
     setToast(null)
   }
+
+  async function finishShutdown({ changed, previous, note }: RitualResult) {
+    const before = await commitRitual(today, changed, { shutdownAt: new Date().toISOString(), ...(note ? { note } : {}) })
+    setToast({ message: 'ปิดวันแล้ว เลิกงานได้เลย', undo: previous, day: { date: today, before } })
+    window.location.hash = ''
+  }
+
+  async function finishReview({ changed, previous }: RitualResult) {
+    const before = await commitRitual(today, changed, { reviewAt: new Date().toISOString() })
+    setToast({ message: 'บันทึกการทบทวนสัปดาห์แล้ว', undo: previous, day: { date: today, before } })
+    window.location.hash = 'week'
+  }
+
+  // กดแจ้งเตือนตอนแอปเปิดอยู่: service worker ส่ง hash มาให้เปิดหน้าที่ถูกต้อง
+  useEffect(() => {
+    const sw = navigator.serviceWorker
+    if (!sw) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'openloops:navigate' && typeof e.data.hash === 'string') window.location.hash = e.data.hash
+    }
+    sw.addEventListener('message', onMessage)
+    return () => sw.removeEventListener('message', onMessage)
+  }, [])
 
   function toggleOpen(id: string) {
     setOpenIds((ids) => {
@@ -291,6 +330,28 @@ export function App() {
         </section>
       )}
 
+      {loops && view === 'shutdown' && (
+        <ShutdownWizard
+          loops={loops}
+          today={today}
+          settings={settings}
+          onLoopChange={(next) => void saveLoop(next)}
+          onFinish={(result) => void finishShutdown(result)}
+          onCancel={() => (window.location.hash = '')}
+        />
+      )}
+
+      {loops && weekRows && view === 'review' && (
+        <WeeklyReview
+          loops={loops}
+          today={today}
+          settings={settings}
+          shutdownDates={shutdownDates}
+          onFinish={(result) => void finishReview(result)}
+          onCancel={() => (window.location.hash = 'week')}
+        />
+      )}
+
       {loops && loops.length > 0 && view === 'week' && (
         <WeekBoard
           plan={week}
@@ -302,6 +363,7 @@ export function App() {
           onOpen={(loop) => setDetailId(loop.id)}
           onMove={move}
           onMeetingChange={(date, minutes) => void saveMeetingMinutes(date, minutes)}
+          onReview={() => (window.location.hash = 'review')}
         />
       )}
 
@@ -313,6 +375,17 @@ export function App() {
             {groups.closed.length > 0 && <> · ปิดแล้ว {groups.closed.length}</>}
           </p>
 
+          {showReviewPrompt && (
+            <div className="ritual-prompt">
+              <span>
+                <strong>ถึงเวลาทบทวนสัปดาห์</strong> เคลียร์งานค้างและวางแผนสัปดาห์หน้า ใช้เวลาราว 15 นาที
+              </span>
+              <a className="button" href="#review">
+                เริ่มทบทวน
+              </a>
+            </div>
+          )}
+
           <Attention nudges={nudges} onPull={(loop) => void move(loop, today)} onOpen={(loop) => setDetailId(loop.id)} />
 
           <TodayPanel
@@ -321,6 +394,7 @@ export function App() {
             settings={settings}
             hasTodayLoops={groups.today.length > 0}
             postponeDate={postponeDate}
+            shutdownAt={shutdownAt}
             onMeetingChange={(minutes) => void saveMeetingMinutes(today, minutes)}
             onSettingsChange={(next) => void saveSettings(next)}
             onPostpone={postpone}
@@ -389,7 +463,7 @@ export function App() {
       {toast && (
         <div className="toast" role="status">
           <span>{toast.message}</span>
-          {toast.undo.length > 0 && (
+          {(toast.undo.length > 0 || toast.day) && (
             <button type="button" onClick={undo}>
               <Icon name="undo" /> เลิกทำ
             </button>

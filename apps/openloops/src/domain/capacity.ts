@@ -176,6 +176,7 @@ function isUrgent(loop: Loop, today: DateKey): boolean {
 /**
  * ลูปที่ควรเลื่อนออกจากวันนี้ให้พอดีเวลาว่าง
  * - ไม่แตะลูปที่ส่งวันนี้หรือเลยกำหนด
+ * - ใช้ลูปที่ยังไม่เคยเลื่อนซ้ำก่อน ลูปที่เลื่อนมาแล้ว 2 ครั้งขึ้นไปใช้เฉพาะเมื่อไม่พอ
  * - ไล่จากลูปที่ยืดหยุ่นที่สุดก่อน: ไม่มีกำหนดส่ง แล้วจึงส่งไกลสุด
  * - ในกลุ่มกำหนดส่งเดียวกัน ถ้ามีลูปเดียวที่ครอบคลุมส่วนที่เหลือได้ ให้เลือกตัวเล็กสุดที่พอ
  *   ไม่เช่นนั้นเลือกตัวใหญ่สุด เพื่อให้เลื่อนน้อยชิ้นและไม่เลื่อนเกินจำเป็น
@@ -183,19 +184,21 @@ function isUrgent(loop: Loop, today: DateKey): boolean {
 export function suggestPostpone(counted: Loop[], overMinutes: number, today: DateKey): Loop[] {
   const size = (l: Loop) => remainingMinutes(l) ?? 0
   const dueKey = (l: Loop) => l.dueDate ?? '9999-12-31'
-  const pool = counted.filter((l) => !isUrgent(l, today) && size(l) > 0)
+  const movable = counted.filter((l) => !isUrgent(l, today) && size(l) > 0)
   const picked: Loop[] = []
   let left = overMinutes
-  while (left > 0 && pool.length) {
-    const mostFlexible = pool.reduce((a, b) => (dueKey(b) > dueKey(a) ? b : a))
-    const tier = pool.filter((l) => dueKey(l) === dueKey(mostFlexible))
-    const covering = tier.filter((l) => size(l) >= left)
-    const choice = covering.length
-      ? covering.reduce((a, b) => (size(b) < size(a) ? b : a))
-      : tier.reduce((a, b) => (size(b) > size(a) ? b : a))
-    picked.push(choice)
-    pool.splice(pool.indexOf(choice), 1)
-    left -= size(choice)
+  for (const pool of [movable.filter((l) => l.rolloverCount < 2), movable.filter((l) => l.rolloverCount >= 2)]) {
+    while (left > 0 && pool.length) {
+      const mostFlexible = pool.reduce((a, b) => (dueKey(b) > dueKey(a) ? b : a))
+      const tier = pool.filter((l) => dueKey(l) === dueKey(mostFlexible))
+      const covering = tier.filter((l) => size(l) >= left)
+      const choice = covering.length
+        ? covering.reduce((a, b) => (size(b) < size(a) ? b : a))
+        : tier.reduce((a, b) => (size(b) > size(a) ? b : a))
+      picked.push(choice)
+      pool.splice(pool.indexOf(choice), 1)
+      left -= size(choice)
+    }
   }
   return picked
 }

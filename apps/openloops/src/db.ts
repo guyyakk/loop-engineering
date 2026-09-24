@@ -6,12 +6,17 @@ import type { NotifyKind } from './domain/nudges'
 
 // ข้อมูลทั้งหมดอยู่ใน IndexedDB ของเครื่องนี้ ไม่มี server
 
-/** ข้อมูลของแต่ละวัน: เวลาประชุม/ธุระ และการแจ้งเตือนที่ส่งไปแล้ว */
+/** ข้อมูลของแต่ละวัน: เวลาประชุม/ธุระ, การแจ้งเตือนที่ส่งไปแล้ว, การปิดวันและการทบทวนสัปดาห์ */
 export interface DayPlan {
   date: DateKey
   meetingMinutes: number
   sent?: Partial<Record<NotifyKind, string>>
+  shutdownAt?: string
+  note?: string
+  reviewAt?: string
 }
+
+export type DayPatch = Partial<Pick<DayPlan, 'shutdownAt' | 'note' | 'reviewAt'>>
 
 interface SettingsRow extends PlannerSettings {
   key: 'planner'
@@ -84,6 +89,37 @@ export function saveMeetingMinutes(date: DateKey, meetingMinutes: number, target
   return target.transaction('rw', target.days, async () => {
     const row = await target.days.get(date)
     await target.days.put({ ...row, date, meetingMinutes })
+  })
+}
+
+export function getDays(from: DateKey, to: DateKey, target: OpenLoopsDB = db): Promise<DayPlan[]> {
+  return target.days.where('date').between(from, to, true, true).toArray()
+}
+
+/**
+ * บันทึกผลของพิธีปิดวัน/ทบทวนสัปดาห์ในธุรกรรมเดียว: ลูปที่เปลี่ยน + ข้อมูลของวัน
+ * คืนแถวของวันก่อนแก้ ไว้ใช้เลิกทำ
+ */
+export function commitRitual(
+  date: DateKey,
+  loops: Loop[],
+  patch: DayPatch,
+  target: OpenLoopsDB = db,
+): Promise<DayPlan | undefined> {
+  return target.transaction('rw', target.loops, target.days, async () => {
+    const before = await target.days.get(date)
+    await target.loops.bulkPut(loops)
+    await target.days.put({ date, meetingMinutes: 0, ...before, ...patch })
+    return before
+  })
+}
+
+/** เลิกทำพิธี: คืนลูปและข้อมูลของวันกลับเป็นแบบเดิม */
+export function undoRitual(date: DateKey, loops: Loop[], dayBefore: DayPlan | undefined, target: OpenLoopsDB = db): Promise<void> {
+  return target.transaction('rw', target.loops, target.days, async () => {
+    await target.loops.bulkPut(loops)
+    if (dayBefore) await target.days.put(dayBefore)
+    else await target.days.delete(date)
   })
 }
 
