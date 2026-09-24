@@ -1,11 +1,14 @@
 import { useId, useState } from 'react'
+import { isStale } from '../domain/calendar'
 import { remainingMinutes, suggestPostpone, type DayLoad, type PlannerSettings } from '../domain/capacity'
 import { WEEKDAY_SHORT, formatMinutes, withDay, type DateKey } from '../domain/dates'
 import { formatClock } from '../domain/nudges'
 import type { Loop } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
+import { CalendarSettings, syncedText } from './CalendarSettings'
 import { NotifySettings } from './NotifySettings'
+import type { CalendarControls } from '../useCalendar'
 
 interface Props {
   load: DayLoad
@@ -20,6 +23,7 @@ interface Props {
   onSettingsChange: (settings: PlannerSettings) => void
   onPostpone: (loops: Loop[]) => void
   onTestNotification: () => void
+  calendar: CalendarControls
 }
 
 const minutesOf = (iso: string) => {
@@ -52,17 +56,24 @@ function message(load: DayLoad, hasTodayLoops: boolean): string {
   }
 }
 
-/** แถบเวลาของวัน: ประชุม, เผื่อ, งานที่วาง และส่วนที่เกินเวลาเลิกงาน */
+/** ป้ายของปุ่มธุระที่กดเอง: ถ้าวันนั้นมีข้อมูลปฏิทิน ปุ่มนี้คือธุระที่ไม่อยู่ในปฏิทิน จะได้ไม่นับซ้ำ */
+export function meetingLabel(load: DayLoad): string {
+  return load.calendarMinutes !== null ? 'ธุระอื่นนอกปฏิทิน' : 'ประชุมหรือธุระ'
+}
+
+/** แถบเวลาของวัน: ปฏิทิน, ธุระ, เผื่อ, งานที่วาง และส่วนที่เกินเวลาเลิกงาน */
 export function CapacityBar({ load, label, compact = false }: { load: DayLoad; label: string; compact?: boolean }) {
   // วันหยุดไม่มีคำว่าเกิน งานที่วางไว้แสดงเป็นแถบปกติ
   const off = load.tone === 'off'
   const within = off ? load.plannedMinutes : Math.min(load.plannedMinutes, load.freeMinutes)
   const over = off ? 0 : Math.max(0, load.plannedMinutes - load.freeMinutes)
-  const scale = Math.max(load.workMinutes, load.meetingMinutes + load.bufferMinutes + load.plannedMinutes, 1)
+  const calendar = load.calendarMinutes ?? 0
+  const scale = Math.max(load.workMinutes, calendar + load.meetingMinutes + load.bufferMinutes + load.plannedMinutes, 1)
   const pct = (m: number) => `${(m / scale) * 100}%`
   return (
     <div className="cap" role="img" aria-label={label}>
       <div className="cap-track">
+        <span className="seg seg-calendar" style={{ width: pct(calendar) }} />
         <span className="seg seg-meeting" style={{ width: pct(load.meetingMinutes) }} />
         <span className="seg seg-buffer" style={{ width: pct(load.bufferMinutes) }} />
         <span className="seg seg-planned" style={{ width: pct(within) }} />
@@ -72,9 +83,14 @@ export function CapacityBar({ load, label, compact = false }: { load: DayLoad; l
       {over > 0 && <span className="cap-end" style={{ left: pct(load.workMinutes) }} title="เวลาเลิกงาน" />}
       {!compact && (
       <div className="cap-legend" aria-hidden="true">
+        {calendar > 0 && (
+          <span>
+            <i className="dot seg-calendar" /> ปฏิทิน {formatMinutes(calendar)}
+          </span>
+        )}
         {load.meetingMinutes > 0 && (
           <span>
-            <i className="dot seg-meeting" /> ประชุม {formatMinutes(load.meetingMinutes)}
+            <i className="dot seg-meeting" /> {load.calendarMinutes !== null ? 'ธุระอื่น' : 'ประชุม'} {formatMinutes(load.meetingMinutes)}
           </span>
         )}
         {load.bufferMinutes > 0 && (
@@ -107,6 +123,7 @@ export function TodayPanel({
   onSettingsChange,
   onPostpone,
   onTestNotification,
+  calendar,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const ids = useId()
@@ -189,8 +206,24 @@ export function TodayPanel({
       )}
 
       <div className="field">
-        <span className="field-label">ประชุมหรือธุระวันนี้</span>
-        <Chips label="ประชุมหรือธุระวันนี้" options={MEETINGS} value={load.meetingMinutes} onChange={onMeetingChange} />
+        <span className="field-label">{meetingLabel(load)}วันนี้</span>
+        <Chips label={`${meetingLabel(load)}วันนี้`} options={MEETINGS} value={load.meetingMinutes} onChange={onMeetingChange} />
+        {settings.calendarEnabled && (
+          <p className="field-note">
+            Google Calendar:{' '}
+            {calendar.syncing
+              ? 'กำลังซิงก์'
+              : settings.calendarSyncedAt
+                ? `ซิงก์ล่าสุด ${syncedText(settings.calendarSyncedAt)}${isStale(settings.calendarSyncedAt, Date.now()) ? ' · ข้อมูลเก่าเกิน 1 วัน' : ''}`
+                : 'ยังไม่ได้ซิงก์'}{' '}
+            {!calendar.syncing && (
+              <button type="button" className="link-btn" onClick={calendar.connect}>
+                {calendar.hasToken ? 'ซิงก์ตอนนี้' : 'ซิงก์อีกครั้ง'}
+              </button>
+            )}
+            {calendar.error && <span className="field-error"> {calendar.error}</span>}
+          </p>
+        )}
       </div>
 
       {showSettings && (
@@ -240,6 +273,7 @@ export function TodayPanel({
             />
           </div>
           <NotifySettings settings={settings} onChange={onSettingsChange} onTest={onTestNotification} />
+          <CalendarSettings settings={settings} onSettingsChange={onSettingsChange} calendar={calendar} />
           <a className="button data-link" href="#data">
             <Icon name="folder" /> ข้อมูลและการสำรอง
           </a>

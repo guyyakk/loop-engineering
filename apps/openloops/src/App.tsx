@@ -14,8 +14,8 @@ import {
   claimNotification,
   commitRitual,
   getDays,
-  getMeetingMinutes,
-  getMeetings,
+  getBusy,
+  getBusyRange,
   getSent,
   getSettings,
   putMerged,
@@ -52,6 +52,7 @@ import { briefMessage, nudgesFor, pendingNotifications, shutdownMessage } from '
 import { reviewDue } from './domain/rituals'
 import { downloadText } from './download'
 import { permissionState, showNotification } from './notifier'
+import { useCalendar } from './useCalendar'
 
 type Editing = { mode: 'create'; draft: LoopDraft } | { mode: 'edit'; loop: Loop }
 /** undo คืนสภาพก่อนเปลี่ยน; long = การเปลี่ยนใหญ่ (พิธี, นำเข้า) ให้เวลาเลิกทำนานขึ้น */
@@ -130,10 +131,10 @@ export function App() {
   const view = useView()
   const storedSettings = useLiveQuery(() => getSettings(), [])
   const settings = storedSettings ?? DEFAULT_SETTINGS
-  const meetingMinutes = useLiveQuery(() => getMeetingMinutes(today), [today]) ?? 0
+  const todayBusy = useLiveQuery(() => getBusy(today), [today]) ?? 0
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = addDays(startOfWeek(today), weekOffset * 7)
-  const meetings = useLiveQuery(() => getMeetings(weekStart, addDays(weekStart, 6)), [weekStart])
+  const meetings = useLiveQuery(() => getBusyRange(weekStart, addDays(weekStart, 6)), [weekStart])
   const thisWeek = startOfWeek(today)
   const weekRows = useLiveQuery(() => getDays(thisWeek, addDays(thisWeek, 6)), [thisWeek])
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -141,14 +142,15 @@ export function App() {
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set())
   const [toast, setToast] = useState<Toast | null>(null)
   const [dismissedOn, setDismissedOn] = useState<string | null>(readDismissed)
+  const calendar = useCalendar(settings, storedSettings !== undefined, today)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const detailRef = useRef<HTMLDialogElement>(null)
 
   const groups = useMemo(() => groupLoops(loops ?? [], today), [loops, today])
   const projects = useMemo(() => projectsOf(loops ?? []), [loops])
   const load = useMemo(
-    () => computeDayLoad(loops ?? [], today, settings, meetingMinutes),
-    [loops, today, settings, meetingMinutes],
+    () => computeDayLoad(loops ?? [], today, settings, todayBusy),
+    [loops, today, settings, todayBusy],
   )
   const week = useMemo(
     () => buildWeek(loops ?? [], weekStart, today, settings, meetings ?? {}),
@@ -483,6 +485,7 @@ export function App() {
             onSettingsChange={(next) => void saveSettings(next)}
             onPostpone={postpone}
             onTestNotification={() => void testNotification()}
+            calendar={calendar}
           />
 
           {(['today', 'week', 'later'] as const).map((h) => (

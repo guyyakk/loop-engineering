@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { getMeetings } from '../db'
+import { getBusyRange } from '../db'
 import { buildWeek, type PlannerSettings } from '../domain/capacity'
 import {
   addDays,
@@ -50,7 +50,7 @@ export function WeeklyReview({ loops, today, settings, shutdownDates, onFinish, 
   const [clear, setClear] = useState<Decisions>(() => Object.fromEntries(review.map((r) => [r.loop.id, { kind: 'keep' }])))
   const [plan, setPlan] = useState<Decisions>({})
   const [targetWeek, setTargetWeek] = useState(() => defaultTargetWeek(today))
-  const meetings = useLiveQuery(() => getMeetings(targetWeek, addDays(targetWeek, 6)), [targetWeek])
+  const meetings = useLiveQuery(() => getBusyRange(targetWeek, addDays(targetWeek, 6)), [targetWeek])
 
   const summary = weekSummary(loops, today, settings, shutdownDates)
   const handled = new Set(review.filter((r) => clear[r.loop.id]?.kind !== 'keep').map((r) => r.loop.id))

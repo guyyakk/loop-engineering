@@ -5,7 +5,10 @@ import {
   allLoops,
   getMeetingMinutes,
   claimNotification,
+  clearCalendarBusy,
   commitRitual,
+  getBusy,
+  getBusyRange,
   getDays,
   getMeetings,
   getSent,
@@ -16,6 +19,7 @@ import {
   replaceAll,
   rollOverDay,
   saveLoop,
+  saveCalendarBusy,
   saveLoops,
   saveMeetingMinutes,
   saveSettings,
@@ -194,6 +198,27 @@ describe('db', () => {
     const plan = mergeBackup(back, makeBackup([incoming, { ...old, title: 'เก่ากว่า', updatedAt: '2020-01-01T00:00:00.000Z' }], [], DEFAULT_SETTINGS, at))
     await putMerged(plan.loops, plan.days, db)
     expect((await readAll(db)).loops.map((l) => l.title).sort()).toEqual(['ของเดิม', 'จากไฟล์'])
+    db.close()
+  })
+
+  it('stores calendar minutes next to manual time, and disconnect removes only the calendar part', async () => {
+    const db = openDb(uniqueName())
+    await saveMeetingMinutes('2026-09-24', 30, db)
+    await commitRitual('2026-09-24', [], { shutdownAt: 'T' }, db)
+    expect(await getBusy('2026-09-24', db)).toEqual({ manual: 30, calendar: null })
+
+    await saveCalendarBusy({ '2026-09-24': 120, '2026-09-25': 0 }, db)
+    expect(await getBusy('2026-09-24', db)).toEqual({ manual: 30, calendar: 120 })
+    expect(await getBusyRange('2026-09-21', '2026-09-27', db)).toEqual({
+      '2026-09-24': { manual: 30, calendar: 120 },
+      '2026-09-25': { manual: 0, calendar: 0 },
+    })
+    // ข้อมูลอื่นของวันต้องไม่หาย
+    expect((await getDays('2026-09-24', '2026-09-24', db))[0].shutdownAt).toBe('T')
+
+    await clearCalendarBusy(db)
+    expect(await getBusy('2026-09-24', db)).toEqual({ manual: 30, calendar: null })
+    expect(await getBusy('2026-09-25', db)).toEqual({ manual: 0, calendar: null })
     db.close()
   })
 })

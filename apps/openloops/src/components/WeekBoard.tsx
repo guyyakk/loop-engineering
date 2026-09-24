@@ -16,7 +16,7 @@ import { loopFlags } from '../domain/nudges'
 import { Chips } from './Chips'
 import { Icon } from './Icon'
 import { Dots, FlagBadges, rolloverLabel } from './LoopCard'
-import { CapacityBar, MEETINGS } from './TodayPanel'
+import { CapacityBar, MEETINGS, meetingLabel } from './TodayPanel'
 
 interface Props {
   plan: WeekPlan
@@ -199,9 +199,12 @@ export function WeekBoard({
         </header>
         {meetingDay === date && (
           <div className="day-meeting">
-            <span className="field-label">ประชุมหรือธุระ</span>
+            <span className="field-label">
+              {meetingLabel(load)}
+              {load.calendarMinutes !== null && <span className="muted"> ปฏิทินไม่ว่าง {formatMinutes(load.calendarMinutes)}</span>}
+            </span>
             <Chips
-              label={`ประชุมหรือธุระ ${formatLongDay(date)}`}
+              label={`${meetingLabel(load)} ${formatLongDay(date)}`}
               options={MEETINGS}
               value={load.meetingMinutes}
               onChange={(m) => onMeetingChange(date, m)}

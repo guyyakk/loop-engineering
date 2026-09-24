@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import { DEFAULT_SETTINGS, type PlannerSettings } from './domain/capacity'
+import { DEFAULT_SETTINGS, type DayBusy, type PlannerSettings } from './domain/capacity'
 import { toDateKey, type DateKey } from './domain/dates'
 import type { DayPatch, DayPlan } from './domain/day'
 import { startDay, type Loop } from './domain/loop'
@@ -80,6 +80,38 @@ export function saveMeetingMinutes(date: DateKey, meetingMinutes: number, target
   return target.transaction('rw', target.days, async () => {
     const row = await target.days.get(date)
     await target.days.put({ ...row, date, meetingMinutes })
+  })
+}
+
+const busyOf = (row: DayPlan | undefined): DayBusy => ({
+  manual: row?.meetingMinutes ?? 0,
+  calendar: row?.calendarMinutes ?? null,
+})
+
+export async function getBusy(date: DateKey, target: OpenLoopsDB = db): Promise<DayBusy> {
+  return busyOf(await target.days.get(date))
+}
+
+/** เวลาไม่ว่างของทุกวันในช่วง วันที่ไม่มีแถวจะไม่มีในผลลัพธ์ */
+export async function getBusyRange(from: DateKey, to: DateKey, target: OpenLoopsDB = db): Promise<Record<DateKey, DayBusy>> {
+  const rows = await target.days.where('date').between(from, to, true, true).toArray()
+  return Object.fromEntries(rows.map((r) => [r.date, busyOf(r)]))
+}
+
+/** บันทึกนาทีจากปฏิทินของหลายวัน โดยไม่แตะข้อมูลอื่นของวันนั้น */
+export function saveCalendarBusy(byDay: Record<DateKey, number>, target: OpenLoopsDB = db): Promise<void> {
+  return target.transaction('rw', target.days, async () => {
+    for (const [date, calendarMinutes] of Object.entries(byDay)) {
+      const row = await target.days.get(date)
+      await target.days.put({ meetingMinutes: 0, ...row, date, calendarMinutes })
+    }
+  })
+}
+
+/** ตัดการเชื่อมต่อ: ลบนาทีจากปฏิทินทุกวัน ธุระที่กดเองยังอยู่ */
+export function clearCalendarBusy(target: OpenLoopsDB = db): Promise<number> {
+  return target.days.toCollection().modify((row) => {
+    delete row.calendarMinutes
   })
 }
 

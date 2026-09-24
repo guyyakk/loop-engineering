@@ -16,6 +16,11 @@ export interface PlannerSettings {
   particle: Particle
   /** เวลาที่ส่งออกไฟล์สำรองล่าสุด */
   lastBackupAt: string | null
+  /** OAuth Client ID ของผู้ใช้เอง สำหรับ Google Calendar (ไม่ใช่ความลับ) */
+  googleClientId: string | null
+  /** เคยเชื่อม Google Calendar แล้ว ให้ใช้นาทีจากปฏิทินและชวนซิงก์ต่อ */
+  calendarEnabled: boolean
+  calendarSyncedAt: string | null
 }
 
 export type Particle = '' | 'ครับ' | 'ค่ะ'
@@ -30,6 +35,9 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
   notify: false,
   particle: '',
   lastBackupAt: null,
+  googleClientId: null,
+  calendarEnabled: false,
+  calendarSyncedAt: null,
 }
 
 /** สัดส่วนที่ถือว่าใกล้เต็ม */
@@ -38,9 +46,26 @@ export const TIGHT_RATIO = 0.85
 /** off = วันหยุด: เวลาว่างเป็น 0 แต่ไม่ถือว่าเกิน */
 export type LoadTone = 'empty' | 'ok' | 'tight' | 'over' | 'off'
 
+/** เวลาไม่ว่างของวัน: ธุระที่กดเอง และนาทีจากปฏิทิน (null = วันนั้นไม่มีข้อมูลปฏิทิน) */
+export interface DayBusy {
+  manual: number
+  calendar: number | null
+}
+
+/** รับทั้งตัวเลข (ธุระที่กดเองอย่างเดียว) และ DayBusy */
+export type Busy = number | DayBusy
+
+export function toBusy(busy: Busy | undefined): DayBusy {
+  if (busy === undefined) return { manual: 0, calendar: null }
+  return typeof busy === 'number' ? { manual: busy, calendar: null } : busy
+}
+
 export interface DayLoad {
   workMinutes: number
+  /** ธุระที่กดเอง (ถ้ามีปฏิทินคือธุระนอกปฏิทิน) */
   meetingMinutes: number
+  /** นาทีไม่ว่างจากปฏิทินในเวลางาน */
+  calendarMinutes: number | null
   bufferMinutes: number
   freeMinutes: number
   plannedMinutes: number
@@ -85,8 +110,9 @@ export function loadForDay(
   date: DateKey,
   today: DateKey,
   settings: PlannerSettings,
-  meetingMinutes: number,
+  busy: Busy,
 ): DayLoad {
+  const { manual: meetingMinutes, calendar: calendarMinutes } = toBusy(busy)
   const onDay = loopsOnDay(loops, date, today)
   const waiting = onDay.filter((l) => l.status === 'waiting')
   const active = onDay.filter((l) => l.status !== 'waiting')
@@ -96,7 +122,8 @@ export function loadForDay(
   const working = isWorkday(date, settings)
   const workMinutes = working ? settings.workMinutes : 0
   const bufferMinutes = working ? settings.bufferMinutes : 0
-  const free = freeMinutes({ workMinutes, bufferMinutes }, meetingMinutes)
+  // นาทีจากปฏิทินกับธุระที่กดเองแยกกันแล้ว จึงบวกกันได้โดยไม่นับซ้ำ
+  const free = freeMinutes({ workMinutes, bufferMinutes }, meetingMinutes + (calendarMinutes ?? 0))
   const diffMinutes = free - plannedMinutes
 
   let tone: LoadTone
@@ -109,6 +136,7 @@ export function loadForDay(
   return {
     workMinutes,
     meetingMinutes,
+    calendarMinutes,
     bufferMinutes,
     freeMinutes: free,
     plannedMinutes,
@@ -122,8 +150,8 @@ export function loadForDay(
   }
 }
 
-export function computeDayLoad(loops: Loop[], today: DateKey, settings: PlannerSettings, meetingMinutes: number): DayLoad {
-  return loadForDay(loops, today, today, settings, meetingMinutes)
+export function computeDayLoad(loops: Loop[], today: DateKey, settings: PlannerSettings, busy: Busy): DayLoad {
+  return loadForDay(loops, today, today, settings, busy)
 }
 
 export interface DayColumn {
@@ -149,7 +177,7 @@ export function buildWeek(
   weekStart: DateKey,
   today: DateKey,
   settings: PlannerSettings,
-  meetings: Record<DateKey, number>,
+  meetings: Record<DateKey, Busy>,
 ): WeekPlan {
   const days = weekDays(weekStart).map((date) => {
     const load = loadForDay(loops, date, today, settings, meetings[date] ?? 0)

@@ -20,6 +20,7 @@
   --info-soft: #e5f0fa;
   --ok: #2d7a31;
   --ok-soft: #e7f2e5;
+  --calendar: #2c8a7e;
   --radius: 10px;
   --radius-lg: 14px;
   --font: 'IBM Plex Sans Thai', 'Leelawadee UI', 'Noto Sans Thai', system-ui, sans-serif;
@@ -47,6 +48,7 @@
     --info-soft: rgba(130, 189, 242, 0.14);
     --ok: #8fd392;
     --ok-soft: rgba(143, 211, 146, 0.13);
+    --calendar: #5cc4b5;
   }
 }
 
@@ -731,6 +733,10 @@ input.chip-date {
   transition: width 0.25s ease-out;
 }
 
+.seg-calendar {
+  background: var(--calendar);
+}
+
 .seg-meeting {
   background: var(--text-3);
 }
@@ -1227,6 +1233,35 @@ input.chip-date {
 .week-review {
   min-height: 32px;
   font-size: 13px;
+}
+
+/* ---------- calendar ---------- */
+
+.setup-guide summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.setup-guide ol {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.setup-guide a {
+  color: var(--accent);
+}
+
+.setup-guide code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- data and backup ---------- */

@@ -1,3 +1,4 @@
+import { validateClientId } from './calendar'
 import { DEFAULT_SETTINGS, type Particle, type PlannerSettings } from './capacity'
 import { dateKeyOf, daysBetween, toDateKey, type DateKey } from './dates'
 import type { DayPlan } from './day'
@@ -127,6 +128,7 @@ function parseDay(raw: unknown): DayPlan {
   if (isTime(raw.shutdownAt)) day.shutdownAt = raw.shutdownAt
   if (isText(raw.note)) day.note = raw.note
   if (isTime(raw.reviewAt)) day.reviewAt = raw.reviewAt
+  if (typeof raw.calendarMinutes === 'number' && raw.calendarMinutes >= 0) day.calendarMinutes = raw.calendarMinutes
   return day
 }
 
@@ -142,6 +144,9 @@ function parseSettings(raw: unknown): PlannerSettings {
     notify: typeof s.notify === 'boolean' ? s.notify : d.notify,
     particle: PARTICLES.includes(s.particle as Particle) ? (s.particle as Particle) : d.particle,
     lastBackupAt: orNull(s.lastBackupAt, isTime),
+    googleClientId: isText(s.googleClientId) && !validateClientId(s.googleClientId) ? s.googleClientId.trim() : null,
+    calendarEnabled: typeof s.calendarEnabled === 'boolean' ? s.calendarEnabled : d.calendarEnabled,
+    calendarSyncedAt: orNull(s.calendarSyncedAt, isTime),
   }
 }
 

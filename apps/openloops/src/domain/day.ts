@@ -9,6 +9,8 @@ export interface DayPlan {
   shutdownAt?: string
   note?: string
   reviewAt?: string
+  /** นาทีไม่ว่างในเวลางานจาก Google Calendar (เก็บแค่จำนวน ไม่เก็บรายละเอียดนัด) */
+  calendarMinutes?: number
 }
 
 export type DayPatch = Partial<Pick<DayPlan, 'shutdownAt' | 'note' | 'reviewAt'>>

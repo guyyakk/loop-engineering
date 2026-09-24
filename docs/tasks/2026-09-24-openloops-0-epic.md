@@ -47,7 +47,7 @@
 | 4 | [`2026-09-24-openloops-4-nudge-engine.md`](2026-09-24-openloops-4-nudge-engine.md) ✅ (รอทดสอบแจ้งเตือนจริง) | กฎการเตือนข้างบน และ notification | MVP |
 | 5 | [`2026-09-24-openloops-5-rituals.md`](2026-09-24-openloops-5-rituals.md) ✅ | ปิดวัน และทบทวนสัปดาห์แบบ wizard | MVP |
 | 6 | [`2026-09-25-openloops-6-backup.md`](2026-09-25-openloops-6-backup.md) ✅ | ส่งออก/นำเข้าไฟล์สำรอง, เตือนให้สำรอง (แทรกตามที่ผู้ใช้ขอ หลังเห็นข้อมูลใน browser หาย) | MVP |
-| 7 | `...-openloops-7-calendar.md` | ดึงประชุมจาก Google Calendar มาคำนวณเวลาว่าง, จองเวลาทำงานลงปฏิทิน | v2 |
+| 7 | [`2026-09-25-openloops-7-calendar.md`](2026-09-25-openloops-7-calendar.md) ✅ (รอทดสอบ login Google จริง) | ดึงช่วงไม่ว่างจาก Google Calendar มาคำนวณเวลาว่าง (จองเวลาทำงานลงปฏิทินแยกไป spec ภายหลัง เพราะต้องใช้สิทธิ์เขียน) | v2 |
 | 8 | `...-openloops-8-ai-assist.md` | จดงานด้วยภาษาไทยธรรมดา, แนะนำแผนเช้า, แตกงานใหญ่เป็นขั้น | v2 |
 | 9 | `...-openloops-9-desktop-and-line.md` | แอป tray/แถบลอยบน Windows, hotkey จดงาน, แจ้งเตือนผ่าน LINE | v3 |
 

@@ -127,3 +127,23 @@ describe('backup reminder', () => {
     expect(backupReminder(null, 20, '2026-09-26', '2026-09-25')).toBe(true)
   })
 })
+
+describe('calendar fields in backups', () => {
+  it('keeps the client id and per-day calendar minutes, and drops an invalid client id', () => {
+    const backup = makeBackup(
+      [],
+      [{ date: '2026-09-24', meetingMinutes: 0, calendarMinutes: 90 }],
+      { ...DEFAULT_SETTINGS, googleClientId: '123-abc.apps.googleusercontent.com', calendarEnabled: true, calendarSyncedAt: now.toISOString() },
+      now,
+    )
+    const ok = parseBackup(JSON.stringify(backup))
+    expect(ok.ok && ok.backup).toEqual(backup)
+
+    const tampered = JSON.parse(JSON.stringify(backup))
+    tampered.settings.googleClientId = 'not a client id'
+    tampered.settings.accessToken = 'should-never-be-kept'
+    const result = parseBackup(JSON.stringify(tampered))
+    expect(result.ok && result.backup.settings.googleClientId).toBeNull()
+    expect(JSON.stringify(result)).not.toContain('should-never-be-kept')
+  })
+})

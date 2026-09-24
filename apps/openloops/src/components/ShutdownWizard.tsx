@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { getMeetingMinutes } from '../db'
+import { getBusy } from '../db'
 import { loadForDay, loopsOnDay, type PlannerSettings } from '../domain/capacity'
 import { dateKeyOf, formatLongDay, formatMinutes, nextWorkday, withDay, type DateKey } from '../domain/dates'
 import { isClosed, progress, toggleStep, type Loop } from '../domain/loop'
@@ -54,7 +54,7 @@ export function ShutdownWizard({ loops, today, settings, onLoopChange, onFinish,
   const [step, setStep] = useState(0)
   const [showErrors, setShowErrors] = useState(false)
   const [note, setNote] = useState('')
-  const meeting = useLiveQuery(() => getMeetingMinutes(nextDay), [nextDay]) ?? 0
+  const busy = useLiveQuery(() => getBusy(nextDay), [nextDay]) ?? 0
 
   const items = ids.map((id) => loops.find((l) => l.id === id)).filter((l): l is Loop => !!l)
   const open = items.filter((l) => !isClosed(l))
@@ -62,7 +62,7 @@ export function ShutdownWizard({ loops, today, settings, onLoopChange, onFinish,
   const waiting = loops.filter((l) => l.horizon === 'today' && l.status === 'waiting').length
   const ctx = { now: new Date(), nextWorkday: nextDay, workdays: settings.workdays }
   const preview = applyDecisions(loops, decisions, ctx).next
-  const load = loadForDay(preview, nextDay, today, settings, meeting)
+  const load = loadForDay(preview, nextDay, today, settings, busy)
   const doneToday = loops.filter((l) => l.status === 'done' && l.closedAt && dateKeyOf(l.closedAt) === today).length
   const nextLabel = withDay('', nextDay, today).trim()
 
