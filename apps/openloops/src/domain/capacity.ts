@@ -1,19 +1,24 @@
-import { dateKeyOf, type DateKey } from './dates'
-import { isClosed, progress, type Loop } from './loop'
+import { dateKeyOf, weekDays, weekdayOf, type DateKey } from './dates'
+import { compareOpen, isClosed, progress, type Loop } from './loop'
 
 // วางแผนตามเวลาว่างจริง ไม่ใช่ตามรายการที่อยากทำ
 
 export interface PlannerSettings {
   workMinutes: number
   bufferMinutes: number
+  /** วันทำงาน 0 = อาทิตย์ ... 6 = เสาร์ */
+  workdays: number[]
 }
 
-export const DEFAULT_SETTINGS: PlannerSettings = { workMinutes: 480, bufferMinutes: 60 }
+export const DEFAULT_WORKDAYS = [1, 2, 3, 4, 5]
+
+export const DEFAULT_SETTINGS: PlannerSettings = { workMinutes: 480, bufferMinutes: 60, workdays: DEFAULT_WORKDAYS }
 
 /** สัดส่วนที่ถือว่าใกล้เต็ม */
 export const TIGHT_RATIO = 0.85
 
-export type LoadTone = 'empty' | 'ok' | 'tight' | 'over'
+/** off = วันหยุด: เวลาว่างเป็น 0 แต่ไม่ถือว่าเกิน */
+export type LoadTone = 'empty' | 'ok' | 'tight' | 'over' | 'off'
 
 export interface DayLoad {
   workMinutes: number
@@ -41,35 +46,52 @@ export function remainingMinutes(loop: Loop): number | null {
   return Math.round((loop.estimateMinutes * (total - done)) / total)
 }
 
-export function freeMinutes(settings: PlannerSettings, meetingMinutes: number): number {
+export function freeMinutes(settings: Pick<PlannerSettings, 'workMinutes' | 'bufferMinutes'>, meetingMinutes: number): number {
   return Math.max(0, settings.workMinutes - meetingMinutes - settings.bufferMinutes)
 }
 
-export function computeDayLoad(
+export function isWorkday(date: DateKey, settings: PlannerSettings): boolean {
+  return settings.workdays.includes(weekdayOf(date))
+}
+
+/** ลูปที่เปิดอยู่และวางไว้ทำในวัน `date`: วันนี้ดูกลุ่มวันนี้, วันหลังดูวันที่ลงไว้, วันที่ผ่านไปแล้วไม่มี */
+export function loopsOnDay(loops: Loop[], date: DateKey, today: DateKey): Loop[] {
+  if (date < today) return []
+  return loops
+    .filter((l) => !isClosed(l) && (date === today ? l.horizon === 'today' : l.horizon !== 'today' && l.plannedDate === date))
+    .sort(compareOpen)
+}
+
+export function loadForDay(
   loops: Loop[],
+  date: DateKey,
   today: DateKey,
   settings: PlannerSettings,
   meetingMinutes: number,
 ): DayLoad {
-  const todays = loops.filter((l) => l.horizon === 'today' && !isClosed(l))
-  const waiting = todays.filter((l) => l.status === 'waiting')
-  const active = todays.filter((l) => l.status !== 'waiting')
+  const onDay = loopsOnDay(loops, date, today)
+  const waiting = onDay.filter((l) => l.status === 'waiting')
+  const active = onDay.filter((l) => l.status !== 'waiting')
   const counted = active.filter((l) => l.estimateMinutes !== null)
   const unestimated = active.filter((l) => l.estimateMinutes === null)
   const plannedMinutes = counted.reduce((sum, l) => sum + (remainingMinutes(l) ?? 0), 0)
-  const free = freeMinutes(settings, meetingMinutes)
+  const working = isWorkday(date, settings)
+  const workMinutes = working ? settings.workMinutes : 0
+  const bufferMinutes = working ? settings.bufferMinutes : 0
+  const free = freeMinutes({ workMinutes, bufferMinutes }, meetingMinutes)
   const diffMinutes = free - plannedMinutes
 
   let tone: LoadTone
-  if (plannedMinutes === 0) tone = 'empty'
+  if (!working) tone = 'off'
+  else if (plannedMinutes === 0) tone = 'empty'
   else if (plannedMinutes > free) tone = 'over'
   else if (plannedMinutes >= free * TIGHT_RATIO) tone = 'tight'
   else tone = 'ok'
 
   return {
-    workMinutes: settings.workMinutes,
+    workMinutes,
     meetingMinutes,
-    bufferMinutes: settings.bufferMinutes,
+    bufferMinutes,
     freeMinutes: free,
     plannedMinutes,
     diffMinutes,
@@ -77,8 +99,58 @@ export function computeDayLoad(
     counted,
     unestimated,
     waiting,
-    carriedToday: todays.filter((l) => l.carriedOn === today).length,
-    doneToday: loops.filter((l) => l.status === 'done' && l.closedAt && dateKeyOf(l.closedAt) === today).length,
+    carriedToday: onDay.filter((l) => l.carriedOn === date).length,
+    doneToday: loops.filter((l) => l.status === 'done' && l.closedAt && dateKeyOf(l.closedAt) === date).length,
+  }
+}
+
+export function computeDayLoad(loops: Loop[], today: DateKey, settings: PlannerSettings, meetingMinutes: number): DayLoad {
+  return loadForDay(loops, today, today, settings, meetingMinutes)
+}
+
+export interface DayColumn {
+  date: DateKey
+  isPast: boolean
+  isToday: boolean
+  isWorkday: boolean
+  loops: Loop[]
+  load: DayLoad
+}
+
+export interface WeekPlan {
+  days: DayColumn[]
+  /** ลูปที่ยังไม่ได้ลงวัน */
+  tray: { week: Loop[]; later: Loop[] }
+  /** รวมเฉพาะวันนี้เป็นต้นไป เพราะวันที่ผ่านไปแล้ววางงานเพิ่มไม่ได้ */
+  plannedMinutes: number
+  freeMinutes: number
+}
+
+export function buildWeek(
+  loops: Loop[],
+  weekStart: DateKey,
+  today: DateKey,
+  settings: PlannerSettings,
+  meetings: Record<DateKey, number>,
+): WeekPlan {
+  const days = weekDays(weekStart).map((date) => {
+    const load = loadForDay(loops, date, today, settings, meetings[date] ?? 0)
+    return {
+      date,
+      isPast: date < today,
+      isToday: date === today,
+      isWorkday: isWorkday(date, settings),
+      loops: loopsOnDay(loops, date, today),
+      load,
+    }
+  })
+  const unscheduled = loops.filter((l) => !isClosed(l) && l.horizon !== 'today' && !l.plannedDate).sort(compareOpen)
+  const upcoming = days.filter((d) => !d.isPast)
+  return {
+    days,
+    tray: { week: unscheduled.filter((l) => l.horizon === 'week'), later: unscheduled.filter((l) => l.horizon === 'later') },
+    plannedMinutes: upcoming.reduce((sum, d) => sum + d.load.plannedMinutes, 0),
+    freeMinutes: upcoming.reduce((sum, d) => sum + d.load.freeMinutes, 0),
   }
 }
 

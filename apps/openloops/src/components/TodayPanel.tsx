@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { remainingMinutes, suggestPostpone, type DayLoad, type PlannerSettings } from '../domain/capacity'
-import { formatMinutes, type DateKey } from '../domain/dates'
+import { WEEKDAY_SHORT, formatMinutes, withDay, type DateKey } from '../domain/dates'
 import type { Loop } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
@@ -10,6 +10,8 @@ interface Props {
   today: DateKey
   settings: PlannerSettings
   hasTodayLoops: boolean
+  /** วันทำงานถัดไป ที่ปุ่มเลื่อนจะส่งงานไป */
+  postponeDate: DateKey
   onMeetingChange: (minutes: number) => void
   onSettingsChange: (settings: PlannerSettings) => void
   onPostpone: (loops: Loop[]) => void
@@ -17,9 +19,11 @@ interface Props {
 
 const hours = (h: number[]) => h.map((x) => ({ value: x * 60, label: formatMinutes(x * 60) }))
 
-const MEETINGS: ChipOption<number>[] = [{ value: 0, label: 'ไม่มี' }, ...hours([0.5, 1, 1.5, 2, 3, 4])]
-const WORKDAYS: ChipOption<number>[] = hours([6, 7, 8, 9, 10])
+export const MEETINGS: ChipOption<number>[] = [{ value: 0, label: 'ไม่มี' }, ...hours([0.5, 1, 1.5, 2, 3, 4])]
+const WORK_HOURS: ChipOption<number>[] = hours([6, 7, 8, 9, 10])
 const BUFFERS: ChipOption<number>[] = [{ value: 0, label: 'ไม่เผื่อ' }, ...hours([0.5, 1, 1.5, 2])]
+/** เรียงจันทร์ก่อน ตามสัปดาห์ทำงาน */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
 function message(load: DayLoad, hasTodayLoops: boolean): string {
   switch (load.tone) {
@@ -31,13 +35,19 @@ function message(load: DayLoad, hasTodayLoops: boolean): string {
       return `ทำทันในเวลาว่าง เหลือเผื่ออีก ${formatMinutes(load.diffMinutes)}`
     case 'empty':
       return hasTodayLoops ? 'ยังไม่มีงานที่ประเมินเวลาไว้ในวันนี้' : 'ยังไม่มีงานในวันนี้ ดึงงานจากสัปดาห์นี้มาได้'
+    case 'off':
+      return load.plannedMinutes > 0
+        ? `วันนี้เป็นวันหยุด มีงานค้างอยู่ ${formatMinutes(load.plannedMinutes)} ไม่ต้องรีบ`
+        : 'วันนี้เป็นวันหยุดตามที่ตั้งไว้'
   }
 }
 
 /** แถบเวลาของวัน: ประชุม, เผื่อ, งานที่วาง และส่วนที่เกินเวลาเลิกงาน */
-function CapacityBar({ load, label }: { load: DayLoad; label: string }) {
-  const within = Math.min(load.plannedMinutes, load.freeMinutes)
-  const over = Math.max(0, load.plannedMinutes - load.freeMinutes)
+export function CapacityBar({ load, label, compact = false }: { load: DayLoad; label: string; compact?: boolean }) {
+  // วันหยุดไม่มีคำว่าเกิน งานที่วางไว้แสดงเป็นแถบปกติ
+  const off = load.tone === 'off'
+  const within = off ? load.plannedMinutes : Math.min(load.plannedMinutes, load.freeMinutes)
+  const over = off ? 0 : Math.max(0, load.plannedMinutes - load.freeMinutes)
   const scale = Math.max(load.workMinutes, load.meetingMinutes + load.bufferMinutes + load.plannedMinutes, 1)
   const pct = (m: number) => `${(m / scale) * 100}%`
   return (
@@ -46,10 +56,11 @@ function CapacityBar({ load, label }: { load: DayLoad; label: string }) {
         <span className="seg seg-meeting" style={{ width: pct(load.meetingMinutes) }} />
         <span className="seg seg-buffer" style={{ width: pct(load.bufferMinutes) }} />
         <span className="seg seg-planned" style={{ width: pct(within) }} />
-        <span className="seg seg-free" style={{ width: pct(load.freeMinutes - within) }} />
+        <span className="seg seg-free" style={{ width: pct(Math.max(0, load.freeMinutes - within)) }} />
         {over > 0 && <span className="seg seg-over" style={{ width: pct(over) }} />}
       </div>
       {over > 0 && <span className="cap-end" style={{ left: pct(load.workMinutes) }} title="เวลาเลิกงาน" />}
+      {!compact && (
       <div className="cap-legend" aria-hidden="true">
         {load.meetingMinutes > 0 && (
           <span>
@@ -70,11 +81,12 @@ function CapacityBar({ load, label }: { load: DayLoad; label: string }) {
           </span>
         )}
       </div>
+      )}
     </div>
   )
 }
 
-export function TodayPanel({ load, today, settings, hasTodayLoops, onMeetingChange, onSettingsChange, onPostpone }: Props) {
+export function TodayPanel({ load, today, settings, hasTodayLoops, postponeDate, onMeetingChange, onSettingsChange, onPostpone }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const ids = useId()
   const text = message(load, hasTodayLoops)
@@ -122,7 +134,7 @@ export function TodayPanel({ load, today, settings, hasTodayLoops, onMeetingChan
           {load.unestimated.length > 0 && (
             <li>อีก {load.unestimated.length} งานยังไม่ได้ประเมินเวลา จึงยังไม่ถูกนับ เปิดการ์ดแล้วเลือกเวลาได้เลย</li>
           )}
-          {load.carriedToday > 0 && <li>ยกมาจากเมื่อวาน {load.carriedToday} งาน</li>}
+          {load.carriedToday > 0 && <li>ยกมาจากวันก่อน {load.carriedToday} งาน</li>}
           {load.waiting.length > 0 && <li>รอคนอื่นอยู่ {load.waiting.length} งาน ไม่นับเวลา</li>}
         </ul>
       )}
@@ -130,7 +142,7 @@ export function TodayPanel({ load, today, settings, hasTodayLoops, onMeetingChan
       {suggestions.length > 0 && (
         <div className="suggest">
           <p className="suggest-title">
-            แนะนำให้เลื่อนไปพรุ่งนี้ ({formatMinutes(suggestedMinutes)})
+            แนะนำให้{withDay('เลื่อนไป', postponeDate, today)} ({formatMinutes(suggestedMinutes)})
             {suggestedMinutes < -load.diffMinutes && <span className="muted"> ยังไม่พอ งานที่เหลือส่งวันนี้หรือเลยกำหนดแล้ว</span>}
           </p>
           <ul>
@@ -163,10 +175,34 @@ export function TodayPanel({ load, today, settings, hasTodayLoops, onMeetingChan
             <span className="field-label">ชั่วโมงทำงานต่อวัน</span>
             <Chips
               label="ชั่วโมงทำงานต่อวัน"
-              options={WORKDAYS}
+              options={WORK_HOURS}
               value={settings.workMinutes}
               onChange={(workMinutes) => onSettingsChange({ ...settings, workMinutes })}
             />
+          </div>
+          <div className="field">
+            <span className="field-label">วันทำงาน</span>
+            <div className="chips" role="group" aria-label="วันทำงาน">
+              {WEEK_ORDER.map((d) => {
+                const on = settings.workdays.includes(d)
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    className="chip"
+                    aria-pressed={on}
+                    onClick={() => {
+                      // ต้องเหลือวันทำงานอย่างน้อยหนึ่งวัน
+                      if (on && settings.workdays.length === 1) return
+                      const workdays = on ? settings.workdays.filter((x) => x !== d) : [...settings.workdays, d].sort()
+                      onSettingsChange({ ...settings, workdays })
+                    }}
+                  >
+                    {WEEKDAY_SHORT[d]}
+                  </button>
+                )
+              })}
+            </div>
           </div>
           <div className="field">
             <span className="field-label">

@@ -1,4 +1,4 @@
-import { addDays, toDateKey, type DateKey } from './dates'
+import { addDays, startOfWeek, toDateKey, weekdayOf, type DateKey } from './dates'
 
 // "ลูป" คืองานหนึ่งชิ้นที่อาจมีหลายขั้น ลูปจะไม่หายไปเอง
 // ต้องจบด้วยสถานะ done หรือ dropped อย่างตั้งใจเท่านั้น
@@ -35,6 +35,8 @@ export interface Loop {
   plannedDate: DateKey | null
   /** วันที่ถูกยกมาจากวันก่อนโดยอัตโนมัติ */
   carriedOn: DateKey | null
+  /** วันแผนเดิมก่อนถูกยก (ไม่มีในข้อมูลก่อน spec 3) */
+  carriedFrom?: DateKey | null
 }
 
 export interface LoopDraft {
@@ -152,7 +154,9 @@ export function createLoop(draft: LoopDraft, now: Date, id: string = newId()): L
 /** แก้รายละเอียดจากฟอร์ม โดยไม่แตะสถานะและประวัติการขยับของลูป */
 export function applyDraft(loop: Loop, draft: LoopDraft, now: Date): Loop {
   if (!isValidDraft(draft)) throw new Error('applyDraft: draft is invalid')
-  return { ...setHorizon(loop, draft.horizon, now), ...draftFields(draft), updatedAt: now.toISOString() }
+  // เปลี่ยนช่วงเวลาเฉพาะเมื่อผู้ใช้เปลี่ยนจริง จะได้ไม่ล้างวันที่ลงไว้บนบอร์ด
+  const base = draft.horizon === loop.horizon ? loop : setHorizon(loop, draft.horizon, now)
+  return { ...base, ...draftFields(draft), updatedAt: now.toISOString() }
 }
 
 export function isClosed(loop: Loop): boolean {
@@ -220,14 +224,16 @@ export function setStatus(loop: Loop, status: LoopStatus, now: Date, waiting?: W
   return isClosed(loop) ? revive(base, status, now) : base
 }
 
+/** ย้ายไปช่วงเวลา: วันนี้ หรือกลับกองงาน (สัปดาห์นี้ / ไว้ก่อน) ซึ่งล้างวันที่ลงไว้ ไม่นับเป็นการเลื่อน */
 export function setHorizon(loop: Loop, horizon: Horizon, now: Date): Loop {
-  if (horizon === loop.horizon) return { ...loop, updatedAt: now.toISOString() }
+  const ts = now.toISOString()
+  if (horizon === 'today' && loop.horizon === 'today') return { ...loop, updatedAt: ts }
   return {
     ...loop,
     horizon,
     plannedDate: horizon === 'today' ? toDateKey(now) : null,
     carriedOn: null,
-    updatedAt: now.toISOString(),
+    updatedAt: ts,
   }
 }
 
@@ -235,16 +241,35 @@ export function setEstimate(loop: Loop, estimateMinutes: number | null, now: Dat
   return { ...loop, estimateMinutes, updatedAt: now.toISOString() }
 }
 
-/** ย้ายออกจากวันนี้ไปทำพรุ่งนี้ นับเป็นการเลื่อนหนึ่งครั้ง พอถึงวันนั้น startDay จะดึงกลับเข้าวันนี้เอง */
-export function postponeToTomorrow(loop: Loop, now: Date): Loop {
+/**
+ * ลงงานไว้ที่วัน `date` พอถึงวันนั้น startDay จะดึงเข้าวันนี้เอง
+ * ย้ายลูปที่ยังเปิดอยู่ออกจากวันนี้ไปวันหลัง นับเป็นการเลื่อนหนึ่งครั้ง
+ */
+export function scheduleOn(loop: Loop, date: DateKey, now: Date): Loop {
+  const today = toDateKey(now)
+  if (date < today) throw new Error('scheduleOn: date is in the past')
+  if (date === today) return setHorizon(loop, 'today', now)
+  const leavingToday = loop.horizon === 'today' && !isClosed(loop)
   return {
     ...loop,
     horizon: 'week',
-    plannedDate: addDays(toDateKey(now), 1),
+    plannedDate: date,
     carriedOn: null,
-    rolloverCount: loop.rolloverCount + 1,
+    rolloverCount: loop.rolloverCount + (leavingToday ? 1 : 0),
     updatedAt: now.toISOString(),
   }
+}
+
+/** ตัวเลือก "ทำเมื่อไหร่": วันที่ (YYYY-MM-DD) หรือกองงาน */
+export type PlanValue = DateKey | 'week' | 'later'
+
+export function planValueOf(loop: Loop, today: DateKey): PlanValue {
+  if (loop.horizon === 'today') return today
+  return loop.plannedDate ?? loop.horizon
+}
+
+export function applyPlan(loop: Loop, value: PlanValue, now: Date): Loop {
+  return value === 'week' || value === 'later' ? setHorizon(loop, value, now) : scheduleOn(loop, value, now)
 }
 
 /**
@@ -254,15 +279,28 @@ export function postponeToTomorrow(loop: Loop, now: Date): Loop {
  * - ลูปที่วางแผนไว้ถึงวันนี้แล้ว ถูกดึงเข้าวันนี้ (นับไปแล้วตอนกดเลื่อน)
  * รันซ้ำในวันเดียวกันต้องไม่เปลี่ยนอะไรเพิ่ม
  */
-export function startDay(loops: Loop[], today: DateKey): Loop[] {
+export const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
+
+export function startDay(loops: Loop[], today: DateKey, workdays: number[] = ALL_DAYS): Loop[] {
+  // วันหยุดไม่ยกงาน งานค้างรอยกในวันทำงานถัดไปครั้งเดียว
+  const workday = workdays.includes(weekdayOf(today))
   const changed: Loop[] = []
   for (const loop of loops) {
     if (isClosed(loop)) continue
     if (loop.horizon === 'today') {
-      if (!loop.plannedDate || (loop.plannedDate < today && loop.status === 'waiting')) {
-        changed.push({ ...loop, plannedDate: today })
-      } else if (loop.plannedDate < today) {
-        changed.push({ ...loop, plannedDate: today, carriedOn: today, rolloverCount: loop.rolloverCount + 1 })
+      if (!loop.plannedDate) changed.push({ ...loop, plannedDate: today })
+      else if (loop.plannedDate < today && workday) {
+        changed.push(
+          loop.status === 'waiting'
+            ? { ...loop, plannedDate: today }
+            : {
+                ...loop,
+                plannedDate: today,
+                carriedOn: today,
+                carriedFrom: loop.plannedDate,
+                rolloverCount: loop.rolloverCount + 1,
+              },
+        )
       }
     } else if (loop.plannedDate && loop.plannedDate <= today) {
       changed.push({ ...loop, horizon: 'today', plannedDate: today, carriedOn: null })
@@ -299,18 +337,26 @@ export const SECTIONS: Section[] = ['today', 'week', 'later', 'closed']
 
 const statusRank: Record<LoopStatus, number> = { active: 0, blocked: 1, waiting: 2, done: 3, dropped: 3 }
 
-function compareOpen(a: Loop, b: Loop): number {
+export function compareOpen(a: Loop, b: Loop): number {
   return (
     statusRank[a.status] - statusRank[b.status] ||
+    (a.plannedDate ?? '9999-12-31').localeCompare(b.plannedDate ?? '9999-12-31') ||
     (a.dueDate ?? '9999-12-31').localeCompare(b.dueDate ?? '9999-12-31') ||
     a.createdAt.localeCompare(b.createdAt)
   )
 }
 
+/** กลุ่มในหน้ารายการ: ลูปที่ลงวันไว้ไปอยู่ตามวันที่ (ถึงวันอาทิตย์นี้ = สัปดาห์นี้, หลังจากนั้น = ไว้ก่อน) */
+export function sectionOf(loop: Loop, today: DateKey | null): Section {
+  if (isClosed(loop)) return 'closed'
+  if (loop.horizon === 'today' || !loop.plannedDate || !today) return loop.horizon
+  return loop.plannedDate <= addDays(startOfWeek(today), 6) ? 'week' : 'later'
+}
+
 /** จัดกลุ่มตามช่วงเวลา ลูปที่ยังทำได้อยู่บน, ลูปที่รอคนอื่นอยู่ล่าง, ปิดแล้วเรียงล่าสุดก่อน */
-export function groupLoops(loops: Loop[]): Record<Section, Loop[]> {
+export function groupLoops(loops: Loop[], today: DateKey | null = null): Record<Section, Loop[]> {
   const groups: Record<Section, Loop[]> = { today: [], week: [], later: [], closed: [] }
-  for (const loop of loops) groups[isClosed(loop) ? 'closed' : loop.horizon].push(loop)
+  for (const loop of loops) groups[sectionOf(loop, today)].push(loop)
   groups.today.sort(compareOpen)
   groups.week.sort(compareOpen)
   groups.later.sort(compareOpen)

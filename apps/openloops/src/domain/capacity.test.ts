@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, computeDayLoad, freeMinutes, remainingMinutes, suggestPostpone } from './capacity'
-import { createLoop, emptyDraft, newStep, setStatus, toggleStep, type Loop, type LoopDraft } from './loop'
+import { DEFAULT_SETTINGS, buildWeek, computeDayLoad, freeMinutes, loadForDay, remainingMinutes, suggestPostpone } from './capacity'
+import { createLoop, emptyDraft, newStep, scheduleOn, setStatus, toggleStep, type Loop, type LoopDraft } from './loop'
 
 const TODAY = '2026-09-24'
 const morning = new Date(2026, 8, 24, 9, 0)
@@ -51,7 +51,7 @@ describe('computeDayLoad', () => {
   })
 
   it('reports empty, tight and over', () => {
-    const settings = { workMinutes: 480, bufferMinutes: 60 } // ว่าง 420 เมื่อไม่มีประชุม
+    const settings = { ...DEFAULT_SETTINGS, workMinutes: 480, bufferMinutes: 60 } // ว่าง 420 เมื่อไม่มีประชุม
     expect(computeDayLoad([], TODAY, settings, 0).tone).toBe('empty')
     expect(computeDayLoad([mk('a', { estimateMinutes: 240 })], TODAY, settings, 0).tone).toBe('ok')
 
@@ -92,5 +92,51 @@ describe('suggestPostpone', () => {
     expect(picked).not.toContain('due-today')
     expect(picked).not.toContain('overdue')
     expect(suggestPostpone(all, 0, TODAY)).toEqual([])
+  })
+})
+
+describe('week plan (spec 3)', () => {
+  // สัปดาห์ 21–27 ก.ย. 2026, วันนี้พฤหัสบดี 24
+  const WEEK = '2026-09-21'
+  const at = (title: string, date: string, estimateMinutes = 60) =>
+    scheduleOn(mk(title, { horizon: 'week', estimateMinutes }), date, morning)
+
+  it('treats non-workdays as off: no free time and never "over"', () => {
+    const saturday = at('sat', '2026-09-26', 120)
+    const load = loadForDay([saturday], '2026-09-26', TODAY, DEFAULT_SETTINGS, 0)
+    expect(load).toMatchObject({ tone: 'off', freeMinutes: 0, plannedMinutes: 120 })
+  })
+
+  it('uses each day meeting time and its own scheduled loops', () => {
+    const friday = [at('f1', '2026-09-25', 240), at('f2', '2026-09-25', 180)]
+    const load = loadForDay(friday, '2026-09-25', TODAY, DEFAULT_SETTINGS, 120)
+    expect(load).toMatchObject({ freeMinutes: 300, plannedMinutes: 420, tone: 'over' })
+  })
+
+  it('builds 7 days, the unscheduled tray and totals from today on', () => {
+    const loops = [
+      mk('today-a', { estimateMinutes: 120 }),
+      at('fri', '2026-09-25', 60),
+      at('next-mon', '2026-09-28', 60),
+      mk('tray-week', { horizon: 'week' }),
+      mk('tray-later', { horizon: 'later' }),
+      setStatus(mk('done-tue', {}), 'done', new Date(2026, 8, 22, 15, 0)),
+    ]
+    const plan = buildWeek(loops, WEEK, TODAY, DEFAULT_SETTINGS, { '2026-09-25': 60 })
+    expect(plan.days.map((d) => d.date)).toEqual([
+      '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-26', '2026-09-27',
+    ])
+    const byDate = Object.fromEntries(plan.days.map((d) => [d.date, d]))
+    expect(byDate['2026-09-22']).toMatchObject({ isPast: true, loops: [] })
+    expect(byDate['2026-09-22'].load.doneToday).toBe(1)
+    expect(titles(byDate['2026-09-24'].loops)).toEqual(['today-a'])
+    expect(titles(byDate['2026-09-25'].loops)).toEqual(['fri'])
+    expect(byDate['2026-09-25'].load.freeMinutes).toBe(360)
+    expect(byDate['2026-09-26'].isWorkday).toBe(false)
+    expect(titles(plan.tray.week)).toEqual(['tray-week'])
+    expect(titles(plan.tray.later)).toEqual(['tray-later'])
+    // วันนี้ 420 + ศุกร์ 360 (ประชุม 1 ชม.) + เสาร์อาทิตย์ 0
+    expect(plan.freeMinutes).toBe(780)
+    expect(plan.plannedMinutes).toBe(180)
   })
 })

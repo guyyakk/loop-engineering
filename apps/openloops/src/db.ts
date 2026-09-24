@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import { DEFAULT_SETTINGS, type PlannerSettings } from './domain/capacity'
+import { DEFAULT_SETTINGS, DEFAULT_WORKDAYS, type PlannerSettings } from './domain/capacity'
 import { toDateKey, type DateKey } from './domain/dates'
 import { startDay, type Loop } from './domain/loop'
 
@@ -57,7 +57,9 @@ export function allLoops(target: OpenLoopsDB = db): Promise<Loop[]> {
 
 export async function getSettings(target: OpenLoopsDB = db): Promise<PlannerSettings> {
   const row = await target.settings.get('planner')
-  return row ? { workMinutes: row.workMinutes, bufferMinutes: row.bufferMinutes } : DEFAULT_SETTINGS
+  if (!row) return DEFAULT_SETTINGS
+  // แถวจาก spec 2 ยังไม่มีวันทำงาน
+  return { workMinutes: row.workMinutes, bufferMinutes: row.bufferMinutes, workdays: row.workdays ?? DEFAULT_WORKDAYS }
 }
 
 export async function saveSettings(settings: PlannerSettings, target: OpenLoopsDB = db): Promise<void> {
@@ -68,14 +70,20 @@ export async function getMeetingMinutes(date: DateKey, target: OpenLoopsDB = db)
   return (await target.days.get(date))?.meetingMinutes ?? 0
 }
 
+/** เวลาประชุมของทุกวันในช่วง `from`–`to` (รวมหัวท้าย) วันที่ไม่ได้ตั้งไว้จะไม่มีในผลลัพธ์ */
+export async function getMeetings(from: DateKey, to: DateKey, target: OpenLoopsDB = db): Promise<Record<DateKey, number>> {
+  const rows = await target.days.where('date').between(from, to, true, true).toArray()
+  return Object.fromEntries(rows.map((r) => [r.date, r.meetingMinutes]))
+}
+
 export async function saveMeetingMinutes(date: DateKey, meetingMinutes: number, target: OpenLoopsDB = db): Promise<void> {
   await target.days.put({ date, meetingMinutes })
 }
 
 /** ยกงานข้ามวันในธุรกรรมเดียว อ่านข้อมูลล่าสุดเสมอ จึงรันซ้ำได้โดยไม่นับซ้ำ */
-export function rollOverDay(today: DateKey, target: OpenLoopsDB = db): Promise<number> {
+export function rollOverDay(today: DateKey, workdays: number[], target: OpenLoopsDB = db): Promise<number> {
   return target.transaction('rw', target.loops, async () => {
-    const changed = startDay(await target.loops.toArray(), today)
+    const changed = startDay(await target.loops.toArray(), today, workdays)
     await target.loops.bulkPut(changed)
     return changed.length
   })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addStep,
+  applyPlan,
   advance,
   applyDraft,
   createLoop,
@@ -8,9 +9,10 @@ import {
   emptyDraft,
   groupLoops,
   newStep,
-  postponeToTomorrow,
+  planValueOf,
   nextStep,
   progress,
+  scheduleOn,
   setHorizon,
   setStatus,
   startDay,
@@ -225,8 +227,8 @@ describe('planning across days', () => {
     expect(setHorizon(plan('a', 'today', yesterday), 'today', today).plannedDate).toBe('2026-09-23')
   })
 
-  it('postponeToTomorrow moves the loop out of today and counts one postponement', () => {
-    const next = postponeToTomorrow(plan('a', 'today'), today)
+  it('scheduling a loop out of today counts one postponement', () => {
+    const next = scheduleOn(plan('a', 'today'), '2026-09-25', today)
     expect(next).toMatchObject({ horizon: 'week', plannedDate: '2026-09-25', rolloverCount: 1 })
   })
 
@@ -248,7 +250,7 @@ describe('planning across days', () => {
   })
 
   it('startDay brings postponed loops back on their day without counting again', () => {
-    const postponed = postponeToTomorrow(plan('p', 'today', yesterday), yesterday)
+    const postponed = scheduleOn(plan('p', 'today', yesterday), '2026-09-24', yesterday)
     expect(startDay([postponed], '2026-09-23')).toEqual([])
     const [back] = startDay([postponed], TODAY)
     expect(back).toMatchObject({ horizon: 'today', plannedDate: TODAY, carriedOn: null, rolloverCount: 1 })
@@ -267,5 +269,63 @@ describe('planning across days', () => {
     const reopened = setStatus(done, 'active', today)
     expect(reopened.plannedDate).toBe(TODAY)
     expect(startDay([reopened], TODAY)).toEqual([])
+  })
+})
+
+describe('week planning (spec 3)', () => {
+  // 2026-09-24 เป็นวันพฤหัสบดี, 26 = เสาร์, 27 = อาทิตย์, 28 = จันทร์
+  const thu = new Date(2026, 8, 24, 9, 0)
+  const TODAY = '2026-09-24'
+  const WORKDAYS = [1, 2, 3, 4, 5]
+  const plan = (title: string, horizon: LoopDraft['horizon'], at = thu) => createLoop(draft({ title, horizon }), at, title)
+
+  it('scheduleOn: today joins today, future days keep the date, the past is refused', () => {
+    expect(scheduleOn(plan('a', 'week'), TODAY, thu)).toMatchObject({ horizon: 'today', plannedDate: TODAY, rolloverCount: 0 })
+    expect(scheduleOn(plan('a', 'week'), '2026-09-28', thu)).toMatchObject({ horizon: 'week', plannedDate: '2026-09-28', rolloverCount: 0 })
+    expect(() => scheduleOn(plan('a', 'week'), '2026-09-23', thu)).toThrow()
+  })
+
+  it('moving between future days or back to the tray does not count as postponing', () => {
+    const fri = scheduleOn(plan('a', 'week'), '2026-09-25', thu)
+    const mon = scheduleOn(fri, '2026-09-28', thu)
+    expect(mon.rolloverCount).toBe(0)
+    const tray = setHorizon(plan('b', 'today'), 'later', thu)
+    expect(tray).toMatchObject({ horizon: 'later', plannedDate: null, rolloverCount: 0 })
+    expect(setHorizon(mon, 'week', thu).plannedDate).toBeNull()
+  })
+
+  it('applyPlan and planValueOf round-trip every choice', () => {
+    const loop = plan('a', 'week')
+    for (const value of [TODAY, '2026-09-26', 'week', 'later'] as const) {
+      expect(planValueOf(applyPlan(loop, value, thu), TODAY)).toBe(value)
+    }
+  })
+
+  it('editing a scheduled loop keeps its day when the horizon is unchanged', () => {
+    const scheduled = scheduleOn(plan('a', 'week'), '2026-09-28', thu)
+    const edited = applyDraft(scheduled, { ...draftFromLoop(scheduled), title: 'ชื่อใหม่' }, thu)
+    expect(edited.plannedDate).toBe('2026-09-28')
+  })
+
+  it('startDay does not carry or count on non-workdays, then carries once on the next workday', () => {
+    const friday = plan('friday', 'today', new Date(2026, 8, 25, 9, 0))
+    expect(startDay([friday], '2026-09-26', WORKDAYS)).toEqual([])
+    expect(startDay([friday], '2026-09-27', WORKDAYS)).toEqual([])
+    const [monday] = startDay([friday], '2026-09-28', WORKDAYS)
+    expect(monday).toMatchObject({ plannedDate: '2026-09-28', carriedOn: '2026-09-28', carriedFrom: '2026-09-25', rolloverCount: 1 })
+  })
+
+  it('startDay still brings loops scheduled for a weekend day into today', () => {
+    const saturday = scheduleOn(plan('sat', 'week'), '2026-09-26', thu)
+    const [pulled] = startDay([saturday], '2026-09-26', WORKDAYS)
+    expect(pulled).toMatchObject({ horizon: 'today', plannedDate: '2026-09-26', rolloverCount: 0 })
+  })
+
+  it('groupLoops places scheduled loops by date: this week vs later', () => {
+    const thisWeek = scheduleOn(plan('sun', 'later'), '2026-09-27', thu)
+    const nextWeek = scheduleOn(plan('mon', 'week'), '2026-09-28', thu)
+    const g = groupLoops([thisWeek, nextWeek], TODAY)
+    expect(g.week.map((l) => l.id)).toEqual(['sun'])
+    expect(g.later.map((l) => l.id)).toEqual(['mon'])
   })
 })

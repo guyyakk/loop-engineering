@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   allLoops,
   getMeetingMinutes,
+  getMeetings,
   getSettings,
   openDb,
   rollOverDay,
@@ -55,20 +56,28 @@ describe('db', () => {
     expect(byId['open-week']).toMatchObject({ plannedDate: null, carriedOn: null })
     expect(byId['done-today']).toMatchObject({ status: 'done', plannedDate: null })
     // อัปเกรดแล้วเปิดวันเดียวกัน ต้องไม่ถือว่าเป็นงานยกมา
-    expect(await rollOverDay(toDateKey(new Date()), db)).toBe(0)
+    expect(await rollOverDay(toDateKey(new Date()), DEFAULT_SETTINGS.workdays, db)).toBe(0)
     db.close()
   })
 
   it('stores planner settings and meeting time per day', async () => {
     const db = openDb(uniqueName())
     expect(await getSettings(db)).toEqual(DEFAULT_SETTINGS)
-    await saveSettings({ workMinutes: 420, bufferMinutes: 30 }, db)
-    expect(await getSettings(db)).toEqual({ workMinutes: 420, bufferMinutes: 30 })
+    await saveSettings({ workMinutes: 420, bufferMinutes: 30, workdays: [1, 2, 3, 4, 5, 6] }, db)
+    expect(await getSettings(db)).toEqual({ workMinutes: 420, bufferMinutes: 30, workdays: [1, 2, 3, 4, 5, 6] })
+
+    // แถวตั้งค่าจาก spec 2 ที่ยังไม่มีวันทำงาน ต้องได้ค่าเริ่มต้น จ–ศ
+    await db.settings.put({ key: 'planner', workMinutes: 480, bufferMinutes: 60 } as never)
+    expect((await getSettings(db)).workdays).toEqual([1, 2, 3, 4, 5])
 
     expect(await getMeetingMinutes('2026-09-24', db)).toBe(0)
     await saveMeetingMinutes('2026-09-24', 90, db)
     expect(await getMeetingMinutes('2026-09-24', db)).toBe(90)
     expect(await getMeetingMinutes('2026-09-25', db)).toBe(0)
+    await saveMeetingMinutes('2026-09-28', 30, db)
+    await saveMeetingMinutes('2026-10-05', 60, db)
+    expect(await getMeetings('2026-09-21', '2026-09-27', db)).toEqual({ '2026-09-24': 90 })
+    expect(await getMeetings('2026-09-28', '2026-10-04', db)).toEqual({ '2026-09-28': 30 })
     db.close()
   })
 
@@ -76,8 +85,8 @@ describe('db', () => {
     const db = openDb(uniqueName())
     const loop = createLoop({ ...emptyDraft('today'), title: 'ค้าง' }, new Date(2026, 8, 23, 10))
     await saveLoop(loop, db)
-    expect(await rollOverDay('2026-09-24', db)).toBe(1)
-    expect(await rollOverDay('2026-09-24', db)).toBe(0)
+    expect(await rollOverDay('2026-09-24', DEFAULT_SETTINGS.workdays, db)).toBe(1)
+    expect(await rollOverDay('2026-09-24', DEFAULT_SETTINGS.workdays, db)).toBe(0)
     const [stored] = await allLoops(db)
     expect(stored).toMatchObject({ rolloverCount: 1, carriedOn: '2026-09-24', plannedDate: '2026-09-24' })
     db.close()

@@ -1,12 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { CaptureForm } from './components/CaptureForm'
 import { Icon, Logo } from './components/Icon'
 import { LoopCard } from './components/LoopCard'
 import { TodayPanel } from './components/TodayPanel'
+import { WeekBoard } from './components/WeekBoard'
 import {
   allLoops,
   getMeetingMinutes,
+  getMeetings,
   getSettings,
   rollOverDay,
   saveLoop,
@@ -14,26 +16,30 @@ import {
   saveMeetingMinutes,
   saveSettings,
 } from './db'
-import { DEFAULT_SETTINGS, computeDayLoad } from './domain/capacity'
-import { formatLongDay, toDateKey } from './domain/dates'
+import { DEFAULT_SETTINGS, buildWeek, computeDayLoad } from './domain/capacity'
+import { addDays, formatLongDay, nextWorkday, startOfWeek, toDateKey, withDay } from './domain/dates'
 import {
   HORIZON_LABEL,
   applyDraft,
+  applyPlan,
   createLoop,
   draftFromLoop,
   emptyDraft,
   groupLoops,
   isClosed,
-  postponeToTomorrow,
+  planValueOf,
   projectsOf,
+  scheduleOn,
   type Horizon,
   type Loop,
   type LoopDraft,
+  type PlanValue,
 } from './domain/loop'
 
 type Editing = { mode: 'create'; draft: LoopDraft } | { mode: 'edit'; loop: Loop }
 /** undo เก็บสภาพก่อนเปลี่ยนของทุกลูปที่ถูกแก้ในครั้งนั้น */
 type Toast = { message: string; undo: Loop[] }
+type View = 'today' | 'week'
 
 /** date key ของวันนี้ ที่อัปเดตเองเมื่อกลับมาเปิดแอปข้ามวัน */
 function useToday(): string {
@@ -52,52 +58,92 @@ function useToday(): string {
   return today
 }
 
+/** มุมมองอยู่ใน URL (#week) กด back ได้และเปิดตรงจากลิงก์ได้ */
+function useView(): View {
+  const read = (): View => (window.location.hash === '#week' ? 'week' : 'today')
+  const [view, setView] = useState<View>(read)
+  useEffect(() => {
+    const onHash = () => setView(read())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  return view
+}
+
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+}
+
+/** เปิด/ปิด <dialog> ตาม state และย้าย focus ไปช่องที่ควรพิมพ์ก่อน */
+function useModal(ref: RefObject<HTMLDialogElement | null>, open: boolean) {
+  useEffect(() => {
+    const dialog = ref.current
+    if (!dialog) return
+    if (open && !dialog.open) {
+      dialog.showModal()
+      // showModal จะ focus ปุ่มแรก (ปุ่มปิด) เอง ต้องย้ายมาที่ช่องชื่องาน ให้กด N แล้วพิมพ์ต่อได้ทันที
+      dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus()
+    }
+    if (!open && dialog.open) dialog.close()
+  }, [ref, open])
+}
+
+function planLabel(target: PlanValue, today: string): string {
+  if (target === 'week') return 'สัปดาห์นี้ (ไม่ระบุวัน)'
+  if (target === 'later') return 'ไว้ก่อน'
+  return withDay('', target, today).trim()
 }
 
 export function App() {
   const loops = useLiveQuery(() => allLoops(), [])
   const today = useToday()
-  const settings = useLiveQuery(() => getSettings(), []) ?? DEFAULT_SETTINGS
+  const view = useView()
+  const storedSettings = useLiveQuery(() => getSettings(), [])
+  const settings = storedSettings ?? DEFAULT_SETTINGS
   const meetingMinutes = useLiveQuery(() => getMeetingMinutes(today), [today]) ?? 0
+  const [weekOffset, setWeekOffset] = useState(0)
+  const weekStart = addDays(startOfWeek(today), weekOffset * 7)
+  const meetings = useLiveQuery(() => getMeetings(weekStart, addDays(weekStart, 6)), [weekStart])
   const [editing, setEditing] = useState<Editing | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set())
   const [toast, setToast] = useState<Toast | null>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const detailRef = useRef<HTMLDialogElement>(null)
 
-  const groups = useMemo(() => groupLoops(loops ?? []), [loops])
+  const groups = useMemo(() => groupLoops(loops ?? [], today), [loops, today])
   const projects = useMemo(() => projectsOf(loops ?? []), [loops])
   const load = useMemo(
     () => computeDayLoad(loops ?? [], today, settings, meetingMinutes),
     [loops, today, settings, meetingMinutes],
   )
+  const week = useMemo(
+    () => buildWeek(loops ?? [], weekStart, today, settings, meetings ?? {}),
+    [loops, weekStart, today, settings, meetings],
+  )
+  const postponeDate = nextWorkday(today, settings.workdays)
+  const detail = detailId ? (loops ?? []).find((l) => l.id === detailId) ?? null : null
   const openCount = groups.today.length + groups.week.length + groups.later.length
   const waitingCount = (loops ?? []).filter((l) => l.status === 'waiting').length
 
-  // เปิดแอปหรือข้ามเที่ยงคืน: ยกงานที่ค้างเข้าวันนี้
+  // เปิดแอปหรือข้ามเที่ยงคืน: ยกงานที่ค้างเข้าวันนี้ รอให้โหลดวันทำงานจริงก่อน จะได้ไม่ยกผิดวัน
+  const workdaysKey = storedSettings?.workdays.join(',')
   useEffect(() => {
-    void rollOverDay(today)
-  }, [today])
+    if (workdaysKey === undefined) return
+    void rollOverDay(today, workdaysKey ? workdaysKey.split(',').map(Number) : [])
+  }, [today, workdaysKey])
+
+  useModal(dialogRef, editing !== null)
+  useModal(detailRef, detail !== null)
 
   const openCapture = useCallback((horizon: Horizon = 'week') => {
     setEditing({ mode: 'create', draft: emptyDraft(horizon) })
   }, [])
 
   useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (editing && !dialog.open) {
-      dialog.showModal()
-      // showModal จะ focus ปุ่มแรก (ปุ่มปิด) เอง ต้องย้ายมาที่ช่องชื่องาน ให้กด N แล้วพิมพ์ต่อได้ทันที
-      dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus()
-    }
-    if (!editing && dialog.open) dialog.close()
-  }, [editing])
-
-  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== 'n' || e.ctrlKey || e.metaKey || e.altKey) return
-      if (isTyping(e.target) || dialogRef.current?.open) return
+      if (isTyping(e.target) || document.querySelector('dialog[open]')) return
       e.preventDefault()
       openCapture()
     }
@@ -127,9 +173,16 @@ export function App() {
 
   async function postpone(targets: Loop[]) {
     const now = new Date()
-    await saveLoops(targets.map((l) => postponeToTomorrow(l, now)))
+    await saveLoops(targets.map((l) => scheduleOn(l, postponeDate, now)))
     const what = targets.length === 1 ? `"${targets[0].title}"` : `${targets.length} งาน`
-    setToast({ message: `เลื่อน ${what} ไปพรุ่งนี้แล้ว`, undo: targets })
+    setToast({ message: `เลื่อน ${what} ${withDay('ไป', postponeDate, today)}แล้ว`, undo: targets })
+  }
+
+  async function move(loop: Loop, target: PlanValue) {
+    if (planValueOf(loop, today) === target) return
+    if (target !== 'week' && target !== 'later' && target < today) return
+    await saveLoop(applyPlan(loop, target, new Date()))
+    setToast({ message: `ย้าย "${loop.title}" ไป${planLabel(target, today)}แล้ว`, undo: [loop] })
   }
 
   async function undo() {
@@ -138,15 +191,31 @@ export function App() {
     setToast(null)
   }
 
-  const sectionProps = {
+  function toggleOpen(id: string) {
+    setOpenIds((ids) => {
+      const next = new Set(ids)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  }
+
+  const cardProps = {
     today,
+    workdays: settings.workdays,
     onChange: handleChange,
-    onEdit: (loop: Loop) => setEditing({ mode: 'edit', loop }),
+    onEdit: (loop: Loop) => {
+      setDetailId(null)
+      setEditing({ mode: 'edit', loop })
+    },
     onPostpone: (loop: Loop) => postpone([loop]),
   }
 
+  const renderCard = (loop: Loop) => (
+    <LoopCard key={loop.id} loop={loop} {...cardProps} open={openIds.has(loop.id)} onToggle={() => toggleOpen(loop.id)} />
+  )
+
   return (
-    <div className="app">
+    <div className={`app${view === 'week' ? ' wide' : ''}`}>
       <header className="top">
         <div className="brand">
           <Logo />
@@ -155,30 +224,18 @@ export function App() {
             <p className="muted">{formatLongDay(today)}</p>
           </div>
         </div>
+        <nav className="tabs" aria-label="มุมมอง">
+          <a href="#" aria-current={view === 'today' ? 'page' : undefined}>
+            วันนี้
+          </a>
+          <a href="#week" aria-current={view === 'week' ? 'page' : undefined}>
+            สัปดาห์
+          </a>
+        </nav>
         <button type="button" className="primary capture-btn" onClick={() => openCapture()}>
           <Icon name="plus" /> จดงาน <kbd>N</kbd>
         </button>
       </header>
-
-      {loops && loops.length > 0 && (
-        <p className="summary">
-          ลูปที่ยังเปิดอยู่ <strong>{openCount}</strong>
-          {waitingCount > 0 && <> · รอคนอื่น {waitingCount}</>}
-          {groups.closed.length > 0 && <> · ปิดแล้ว {groups.closed.length}</>}
-        </p>
-      )}
-
-      {loops && loops.length > 0 && (
-        <TodayPanel
-          load={load}
-          today={today}
-          settings={settings}
-          hasTodayLoops={groups.today.length > 0}
-          onMeetingChange={(minutes) => void saveMeetingMinutes(today, minutes)}
-          onSettingsChange={(next) => void saveSettings(next)}
-          onPostpone={postpone}
-        />
-      )}
 
       {loops && loops.length === 0 && (
         <section className="empty">
@@ -190,43 +247,67 @@ export function App() {
         </section>
       )}
 
-      {loops &&
-        loops.length > 0 &&
-        (['today', 'week', 'later'] as const).map((h) => (
-          <section key={h} className="section" aria-labelledby={`sec-${h}`}>
-            <div className="section-head">
-              <h2 id={`sec-${h}`}>
-                {HORIZON_LABEL[h]} <span className="count">{groups[h].length}</span>
-              </h2>
-              <button type="button" className="ghost" onClick={() => openCapture(h)} aria-label={`จดงานใน${HORIZON_LABEL[h]}`}>
-                <Icon name="plus" />
-              </button>
-            </div>
-            {groups[h].length ? (
-              <div className="list">
-                {groups[h].map((loop) => (
-                  <LoopCard key={loop.id} loop={loop} {...sectionProps} />
-                ))}
-              </div>
-            ) : (
-              <p className="section-empty">ยังไม่มีงานในช่วงนี้</p>
-            )}
-          </section>
-        ))}
+      {loops && loops.length > 0 && view === 'week' && (
+        <WeekBoard
+          plan={week}
+          today={today}
+          weekStart={weekStart}
+          weekOffset={weekOffset}
+          onWeekOffset={setWeekOffset}
+          onOpen={(loop) => setDetailId(loop.id)}
+          onMove={move}
+          onMeetingChange={(date, minutes) => void saveMeetingMinutes(date, minutes)}
+        />
+      )}
 
-      {groups.closed.length > 0 && (
-        <details className="section closed">
-          <summary>
-            <h2>
-              ปิดแล้ว <span className="count">{groups.closed.length}</span>
-            </h2>
-          </summary>
-          <div className="list">
-            {groups.closed.map((loop) => (
-              <LoopCard key={loop.id} loop={loop} {...sectionProps} />
-            ))}
-          </div>
-        </details>
+      {loops && loops.length > 0 && view === 'today' && (
+        <>
+          <p className="summary">
+            ลูปที่ยังเปิดอยู่ <strong>{openCount}</strong>
+            {waitingCount > 0 && <> · รอคนอื่น {waitingCount}</>}
+            {groups.closed.length > 0 && <> · ปิดแล้ว {groups.closed.length}</>}
+          </p>
+
+          <TodayPanel
+            load={load}
+            today={today}
+            settings={settings}
+            hasTodayLoops={groups.today.length > 0}
+            postponeDate={postponeDate}
+            onMeetingChange={(minutes) => void saveMeetingMinutes(today, minutes)}
+            onSettingsChange={(next) => void saveSettings(next)}
+            onPostpone={postpone}
+          />
+
+          {(['today', 'week', 'later'] as const).map((h) => (
+            <section key={h} className="section" aria-labelledby={`sec-${h}`}>
+              <div className="section-head">
+                <h2 id={`sec-${h}`}>
+                  {HORIZON_LABEL[h]} <span className="count">{groups[h].length}</span>
+                </h2>
+                <button type="button" className="ghost" onClick={() => openCapture(h)} aria-label={`จดงานใน${HORIZON_LABEL[h]}`}>
+                  <Icon name="plus" />
+                </button>
+              </div>
+              {groups[h].length ? (
+                <div className="list">{groups[h].map(renderCard)}</div>
+              ) : (
+                <p className="section-empty">ยังไม่มีงานในช่วงนี้</p>
+              )}
+            </section>
+          ))}
+
+          {groups.closed.length > 0 && (
+            <details className="section closed">
+              <summary>
+                <h2>
+                  ปิดแล้ว <span className="count">{groups.closed.length}</span>
+                </h2>
+              </summary>
+              <div className="list">{groups.closed.map(renderCard)}</div>
+            </details>
+          )}
+        </>
       )}
 
       <dialog ref={dialogRef} className="sheet" onClose={() => setEditing(null)} aria-label="ฟอร์มจดงาน">
@@ -240,6 +321,20 @@ export function App() {
             onSave={handleSave}
             onCancel={() => setEditing(null)}
           />
+        )}
+      </dialog>
+
+      <dialog ref={detailRef} className="sheet detail" onClose={() => setDetailId(null)} aria-label="รายละเอียดงาน">
+        {detail && (
+          <div className="detail-body">
+            <div className="capture-head">
+              <h2>รายละเอียดงาน</h2>
+              <button type="button" className="icon-btn" onClick={() => setDetailId(null)} aria-label="ปิด">
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+            <LoopCard loop={detail} {...cardProps} open onToggle={() => setDetailId(null)} />
+          </div>
         )}
       </dialog>
 

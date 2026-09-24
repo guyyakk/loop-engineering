@@ -1,25 +1,36 @@
 import { useId, useState } from 'react'
 import { remainingMinutes } from '../domain/capacity'
-import { addDays, dueTone, formatMinutes, nextWeekday, withDay, type DateKey } from '../domain/dates'
+import {
+  addDays,
+  dueTone,
+  formatMinutes,
+  formatShortDay,
+  nextWorkday,
+  startOfWeek,
+  withDay,
+  type DateKey,
+} from '../domain/dates'
 import {
   ENERGY_LABEL,
   STATUS_LABEL,
   addStep,
   advance,
+  applyPlan,
   isClosed,
   nextStep,
   progress,
+  planValueOf,
   setEstimate,
-  setHorizon,
   setStatus,
   toggleStep,
   validateWaiting,
   type Loop,
   type LoopStatus,
+  type PlanValue,
 } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
-import { ESTIMATE_OPTIONS, HORIZON_OPTIONS } from './options'
+import { ESTIMATE_OPTIONS } from './options'
 
 interface Props {
   loop: Loop
@@ -27,15 +38,33 @@ interface Props {
   onChange: (next: Loop, prev: Loop) => void
   onEdit: (loop: Loop) => void
   onPostpone: (loop: Loop) => void
+  /** สถานะเปิด/ปิดอยู่ที่ App การ์ดจึงไม่หุบเมื่อย้ายกลุ่มหรือย้ายวัน */
+  open: boolean
+  onToggle: () => void
+  workdays: number[]
 }
 
 const STATUSES: LoopStatus[] = ['active', 'waiting', 'blocked', 'done', 'dropped']
 
 /** "ยกมาจากเมื่อวาน" สำหรับการยกครั้งแรกของวันนี้ ไม่เช่นนั้นบอกจำนวนครั้งที่เลื่อน */
-function rolloverLabel(loop: Loop, today: DateKey): string | null {
+export function rolloverLabel(loop: Loop, today: DateKey): string | null {
   if (loop.rolloverCount === 0) return null
-  if (loop.rolloverCount === 1 && loop.carriedOn === today) return 'ยกมาจากเมื่อวาน'
+  if (loop.rolloverCount === 1 && loop.carriedOn === today) {
+    return loop.carriedFrom ? withDay('ยกมาจาก', loop.carriedFrom, today) : 'ยกมาจากวันก่อน'
+  }
   return `เลื่อนมา ${loop.rolloverCount} ครั้ง`
+}
+
+/** วันที่เลือกได้: วันนี้ถึงอาทิตย์นี้ และจันทร์หน้า ตามด้วยกองงาน */
+function planOptions(today: DateKey): ChipOption<PlanValue>[] {
+  const days: ChipOption<PlanValue>[] = [{ value: today, label: 'วันนี้' }]
+  const sunday = addDays(startOfWeek(today), 6)
+  for (let d = addDays(today, 1); d <= sunday; d = addDays(d, 1)) {
+    days.push({ value: d, label: d === addDays(today, 1) ? 'พรุ่งนี้' : formatShortDay(d) })
+  }
+  const nextMonday = addDays(sunday, 1)
+  if (!days.some((o) => o.value === nextMonday)) days.push({ value: nextMonday, label: 'จันทร์หน้า' })
+  return [...days, { value: 'week', label: 'สัปดาห์นี้ ไม่ระบุวัน' }, { value: 'later', label: 'ไว้ก่อน' }]
 }
 
 function estimateText(loop: Loop, closed: boolean): string | null {
@@ -65,8 +94,7 @@ export function Dots({ done, total }: { done: number; total: number }) {
   )
 }
 
-export function LoopCard({ loop, today, onChange, onEdit, onPostpone }: Props) {
-  const [open, setOpen] = useState(false)
+export function LoopCard({ loop, today, onChange, onEdit, onPostpone, open, onToggle, workdays }: Props) {
   const [newStepText, setNewStepText] = useState('')
   const [waitingDraft, setWaitingDraft] = useState<{ waitingOn: string; followUpDate: DateKey | null } | null>(null)
   const [waitingErrors, setWaitingErrors] = useState<ReturnType<typeof validateWaiting>>({})
@@ -79,19 +107,22 @@ export function LoopCard({ loop, today, onChange, onEdit, onPostpone }: Props) {
   const rollover = closed ? null : rolloverLabel(loop, today)
   const estimate = estimateText(loop, closed)
   const plannedAhead = !closed && loop.horizon !== 'today' && loop.plannedDate && loop.plannedDate > today ? loop.plannedDate : null
+  const postponeDate = nextWorkday(today, workdays)
+  const plans = planOptions(today)
+  const plan = planValueOf(loop, today)
 
   const followUpOptions = (
     [
-      { value: addDays(today, 1), label: 'พรุ่งนี้' },
-      { value: addDays(today, 3), label: 'อีก 3 วัน' },
-      { value: nextWeekday(addDays(today, 1), 1), label: 'จันทร์หน้า' },
+      { value: postponeDate, label: withDay('', postponeDate, today).trim() },
+      { value: nextWorkday(nextWorkday(postponeDate, workdays), workdays), label: 'อีก 3 วันทำการ' },
+      { value: addDays(startOfWeek(today), 7), label: 'จันทร์หน้า' },
     ] as ChipOption<DateKey | null>[]
   ).filter((o, i, all) => all.findIndex((x) => x.value === o.value) === i)
 
   function pickStatus(status: LoopStatus) {
     if (status === loop.status) return
     if (status === 'waiting') {
-      setWaitingDraft({ waitingOn: '', followUpDate: addDays(today, 3) })
+      setWaitingDraft({ waitingOn: '', followUpDate: nextWorkday(nextWorkday(postponeDate, workdays), workdays) })
       setWaitingErrors({})
       return
     }
@@ -152,7 +183,7 @@ export function LoopCard({ loop, today, onChange, onEdit, onPostpone }: Props) {
           className="loop-main"
           aria-expanded={open}
           aria-controls={`${ids}-body`}
-          onClick={() => setOpen((o) => !o)}
+          onClick={onToggle}
         >
           <span className="loop-top">
             <span className="loop-title">{loop.title}</span>
@@ -325,19 +356,26 @@ export function LoopCard({ loop, today, onChange, onEdit, onPostpone }: Props) {
           {!closed && (
             <div className="field">
               <span className="field-label">ทำเมื่อไหร่</span>
-              <Chips
-                label="ทำเมื่อไหร่"
-                options={HORIZON_OPTIONS}
-                value={loop.horizon}
-                onChange={(h) => change(setHorizon(loop, h, new Date()))}
-              />
+              <Chips label="ทำเมื่อไหร่" options={plans} value={plan} onChange={(v) => change(applyPlan(loop, v, new Date()))}>
+                <input
+                  type="date"
+                  className="chip chip-date"
+                  aria-label="เลือกวันทำเอง"
+                  min={today}
+                  value={plan === 'week' || plan === 'later' ? '' : plan}
+                  data-custom={!plans.some((o) => o.value === plan)}
+                  onChange={(e) => {
+                    if (e.target.value && e.target.value >= today) change(applyPlan(loop, e.target.value, new Date()))
+                  }}
+                />
+              </Chips>
             </div>
           )}
 
           <div className="row-end">
             {!closed && loop.horizon === 'today' && (
               <button type="button" onClick={() => onPostpone(loop)}>
-                <Icon name="arrow" /> เลื่อนไปพรุ่งนี้
+                <Icon name="arrow" /> {withDay('เลื่อนไป', postponeDate, today)}
               </button>
             )}
             <button type="button" onClick={() => onEdit(loop)}>

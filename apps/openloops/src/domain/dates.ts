@@ -31,6 +31,40 @@ export function nextWeekday(from: DateKey, weekday: number): DateKey {
   return addDays(from, diff)
 }
 
+export function weekdayOf(key: DateKey): number {
+  return fromDateKey(key).getDay()
+}
+
+/** วันจันทร์ของสัปดาห์ที่มี `key` อยู่ */
+export function startOfWeek(key: DateKey): DateKey {
+  return addDays(key, -((weekdayOf(key) + 6) % 7))
+}
+
+export function weekDays(weekStart: DateKey): DateKey[] {
+  return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+}
+
+/** วันทำงานวันแรกหลัง `from` (ไม่นับ `from`) ถ้าไม่ได้ตั้งวันทำงานไว้เลย ใช้วันถัดไป */
+export function nextWorkday(from: DateKey, workdays: number[]): DateKey {
+  if (workdays.length === 0) return addDays(from, 1)
+  let day = addDays(from, 1)
+  while (!workdays.includes(weekdayOf(day))) day = addDays(day, 1)
+  return day
+}
+
+export const WEEKDAY_SHORT = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.']
+
+/** "ศ. 26" แบบสั้นสำหรับหัวคอลัมน์และปุ่มเลือกวัน */
+export function formatShortDay(key: DateKey): string {
+  return `${WEEKDAY_SHORT[weekdayOf(key)]} ${fromDateKey(key).getDate()}`
+}
+
+const rangeFmt = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short' })
+
+export function formatWeekRange(weekStart: DateKey): string {
+  return `${rangeFmt.format(fromDateKey(weekStart))} – ${rangeFmt.format(fromDateKey(addDays(weekStart, 6)))}`
+}
+
 export function daysBetween(from: DateKey, to: DateKey): number {
   return Math.round((fromDateKey(to).getTime() - fromDateKey(from).getTime()) / 86_400_000)
 }
