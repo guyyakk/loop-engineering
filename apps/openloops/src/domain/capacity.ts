@@ -8,11 +8,26 @@ export interface PlannerSettings {
   bufferMinutes: number
   /** วันทำงาน 0 = อาทิตย์ ... 6 = เสาร์ */
   workdays: number[]
+  /** เวลาเริ่มงาน นาทีนับจากเที่ยงคืน ใช้กำหนดเวลาแจ้งเตือน */
+  startMinutes: number
+  /** แจ้งเตือนบนเครื่อง ปิดไว้จนกว่าผู้ใช้จะเปิดเอง */
+  notify: boolean
+  /** คำลงท้ายในข้อความตามงาน */
+  particle: Particle
 }
+
+export type Particle = '' | 'ครับ' | 'ค่ะ'
 
 export const DEFAULT_WORKDAYS = [1, 2, 3, 4, 5]
 
-export const DEFAULT_SETTINGS: PlannerSettings = { workMinutes: 480, bufferMinutes: 60, workdays: DEFAULT_WORKDAYS }
+export const DEFAULT_SETTINGS: PlannerSettings = {
+  workMinutes: 480,
+  bufferMinutes: 60,
+  workdays: DEFAULT_WORKDAYS,
+  startMinutes: 9 * 60,
+  notify: false,
+  particle: '',
+}
 
 /** สัดส่วนที่ถือว่าใกล้เต็ม */
 export const TIGHT_RATIO = 0.85

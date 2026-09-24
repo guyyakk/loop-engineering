@@ -1,14 +1,16 @@
 import Dexie, { type EntityTable } from 'dexie'
-import { DEFAULT_SETTINGS, DEFAULT_WORKDAYS, type PlannerSettings } from './domain/capacity'
+import { DEFAULT_SETTINGS, type PlannerSettings } from './domain/capacity'
 import { toDateKey, type DateKey } from './domain/dates'
 import { startDay, type Loop } from './domain/loop'
+import type { NotifyKind } from './domain/nudges'
 
 // ข้อมูลทั้งหมดอยู่ใน IndexedDB ของเครื่องนี้ ไม่มี server
 
-/** ข้อมูลของแต่ละวัน ตอนนี้มีแค่เวลาประชุม/ธุระ */
+/** ข้อมูลของแต่ละวัน: เวลาประชุม/ธุระ และการแจ้งเตือนที่ส่งไปแล้ว */
 export interface DayPlan {
   date: DateKey
   meetingMinutes: number
+  sent?: Partial<Record<NotifyKind, string>>
 }
 
 interface SettingsRow extends PlannerSettings {
@@ -58,8 +60,9 @@ export function allLoops(target: OpenLoopsDB = db): Promise<Loop[]> {
 export async function getSettings(target: OpenLoopsDB = db): Promise<PlannerSettings> {
   const row = await target.settings.get('planner')
   if (!row) return DEFAULT_SETTINGS
-  // แถวจาก spec 2 ยังไม่มีวันทำงาน
-  return { workMinutes: row.workMinutes, bufferMinutes: row.bufferMinutes, workdays: row.workdays ?? DEFAULT_WORKDAYS }
+  // แถวจาก spec ก่อน ๆ อาจยังไม่มีค่าที่เพิ่มทีหลัง ให้ใช้ค่าเริ่มต้นแทน
+  const { key: _key, ...stored } = row
+  return { ...DEFAULT_SETTINGS, ...stored }
 }
 
 export async function saveSettings(settings: PlannerSettings, target: OpenLoopsDB = db): Promise<void> {
@@ -76,8 +79,26 @@ export async function getMeetings(from: DateKey, to: DateKey, target: OpenLoopsD
   return Object.fromEntries(rows.map((r) => [r.date, r.meetingMinutes]))
 }
 
-export async function saveMeetingMinutes(date: DateKey, meetingMinutes: number, target: OpenLoopsDB = db): Promise<void> {
-  await target.days.put({ date, meetingMinutes })
+export function saveMeetingMinutes(date: DateKey, meetingMinutes: number, target: OpenLoopsDB = db): Promise<void> {
+  // เก็บข้อมูลอื่นของวันนั้นไว้ด้วย (เช่น การแจ้งเตือนที่ส่งแล้ว)
+  return target.transaction('rw', target.days, async () => {
+    const row = await target.days.get(date)
+    await target.days.put({ ...row, date, meetingMinutes })
+  })
+}
+
+export async function getSent(date: DateKey, target: OpenLoopsDB = db): Promise<Partial<Record<NotifyKind, string>>> {
+  return (await target.days.get(date))?.sent ?? {}
+}
+
+/** จองสิทธิ์ส่งแจ้งเตือนชนิดนี้ของวันนี้ คืน true แค่ครั้งแรก แม้หลายหน้าต่างเรียกพร้อมกัน */
+export function claimNotification(date: DateKey, kind: NotifyKind, target: OpenLoopsDB = db): Promise<boolean> {
+  return target.transaction('rw', target.days, async () => {
+    const row = await target.days.get(date)
+    if (row?.sent?.[kind]) return false
+    await target.days.put({ date, meetingMinutes: 0, ...row, sent: { ...row?.sent, [kind]: new Date().toISOString() } })
+    return true
+  })
 }
 
 /** ยกงานข้ามวันในธุรกรรมเดียว อ่านข้อมูลล่าสุดเสมอ จึงรันซ้ำได้โดยไม่นับซ้ำ */

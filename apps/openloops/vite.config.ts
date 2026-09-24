@@ -27,6 +27,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // จัดการการกดแจ้งเตือน (public/sw-notify.js)
+        importScripts: ['sw-notify.js'],
       },
     }),
   ],

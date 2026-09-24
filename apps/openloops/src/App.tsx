@@ -3,12 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { CaptureForm } from './components/CaptureForm'
 import { Icon, Logo } from './components/Icon'
 import { LoopCard } from './components/LoopCard'
+import { Attention } from './components/Attention'
 import { TodayPanel } from './components/TodayPanel'
 import { WeekBoard } from './components/WeekBoard'
 import {
   allLoops,
+  claimNotification,
   getMeetingMinutes,
   getMeetings,
+  getSent,
   getSettings,
   rollOverDay,
   saveLoop,
@@ -16,7 +19,7 @@ import {
   saveMeetingMinutes,
   saveSettings,
 } from './db'
-import { DEFAULT_SETTINGS, buildWeek, computeDayLoad } from './domain/capacity'
+import { DEFAULT_SETTINGS, buildWeek, computeDayLoad, type Particle } from './domain/capacity'
 import { addDays, formatLongDay, nextWorkday, startOfWeek, toDateKey, withDay } from './domain/dates'
 import {
   HORIZON_LABEL,
@@ -35,6 +38,8 @@ import {
   type LoopDraft,
   type PlanValue,
 } from './domain/loop'
+import { briefMessage, nudgesFor, pendingNotifications, shutdownMessage } from './domain/nudges'
+import { permissionState, showNotification } from './notifier'
 
 type Editing = { mode: 'create'; draft: LoopDraft } | { mode: 'edit'; loop: Loop }
 /** undo เก็บสภาพก่อนเปลี่ยนของทุกลูปที่ถูกแก้ในครั้งนั้น */
@@ -121,6 +126,7 @@ export function App() {
     () => buildWeek(loops ?? [], weekStart, today, settings, meetings ?? {}),
     [loops, weekStart, today, settings, meetings],
   )
+  const nudges = useMemo(() => nudgesFor(loops ?? [], today, settings), [loops, today, settings])
   const postponeDate = nextWorkday(today, settings.workdays)
   const detail = detailId ? (loops ?? []).find((l) => l.id === detailId) ?? null : null
   const openCount = groups.today.length + groups.week.length + groups.later.length
@@ -132,6 +138,43 @@ export function App() {
     if (workdaysKey === undefined) return
     void rollOverDay(today, workdaysKey ? workdaysKey.split(',').map(Number) : [])
   }, [today, workdaysKey])
+
+  // ค่าล่าสุดสำหรับตัวจับเวลาแจ้งเตือน จะได้ไม่ต้องตั้งเวลาใหม่ทุกครั้งที่ข้อมูลเปลี่ยน
+  const latest = useRef({ settings, load, nudges, openToday: groups.today.length })
+  latest.current = { settings, load, nudges, openToday: groups.today.length }
+  const loopsReady = loops !== undefined
+  const notifyOn = storedSettings?.notify === true
+
+  useEffect(() => {
+    if (!notifyOn || !loopsReady) return
+    let stopped = false
+    const tick = async () => {
+      const now = new Date()
+      const date = toDateKey(now)
+      const due = pendingNotifications(now, latest.current.settings, await getSent(date))
+      for (const kind of due) {
+        if (stopped || permissionState() !== 'granted') return
+        if (!(await claimNotification(date, kind))) continue
+        const { load: dayLoad, nudges: dayNudges, openToday } = latest.current
+        const message = kind === 'brief' ? briefMessage(dayLoad, dayNudges) : shutdownMessage(openToday)
+        await showNotification(message, `openloops-${kind}-${date}`)
+      }
+    }
+    void tick()
+    const timer = window.setInterval(() => void tick(), 60_000)
+    const onVisible = () => void tick()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [notifyOn, loopsReady])
+
+  async function testNotification() {
+    const shown = await showNotification(briefMessage(load, nudges), 'openloops-test')
+    setToast({ message: shown ? 'ส่งแจ้งเตือนทดสอบแล้ว' : 'ยังไม่ได้รับสิทธิ์แจ้งเตือนจาก browser', undo: [] })
+  }
 
   useModal(dialogRef, editing !== null)
   useModal(detailRef, detail !== null)
@@ -201,7 +244,8 @@ export function App() {
 
   const cardProps = {
     today,
-    workdays: settings.workdays,
+    settings,
+    onParticleChange: (particle: Particle) => void saveSettings({ ...settings, particle }),
     onChange: handleChange,
     onEdit: (loop: Loop) => {
       setDetailId(null)
@@ -251,6 +295,7 @@ export function App() {
         <WeekBoard
           plan={week}
           today={today}
+          settings={settings}
           weekStart={weekStart}
           weekOffset={weekOffset}
           onWeekOffset={setWeekOffset}
@@ -268,6 +313,8 @@ export function App() {
             {groups.closed.length > 0 && <> · ปิดแล้ว {groups.closed.length}</>}
           </p>
 
+          <Attention nudges={nudges} onPull={(loop) => void move(loop, today)} onOpen={(loop) => setDetailId(loop.id)} />
+
           <TodayPanel
             load={load}
             today={today}
@@ -277,6 +324,7 @@ export function App() {
             onMeetingChange={(minutes) => void saveMeetingMinutes(today, minutes)}
             onSettingsChange={(next) => void saveSettings(next)}
             onPostpone={postpone}
+            onTestNotification={() => void testNotification()}
           />
 
           {(['today', 'week', 'later'] as const).map((h) => (
@@ -341,9 +389,11 @@ export function App() {
       {toast && (
         <div className="toast" role="status">
           <span>{toast.message}</span>
-          <button type="button" onClick={undo}>
-            <Icon name="undo" /> เลิกทำ
-          </button>
+          {toast.undo.length > 0 && (
+            <button type="button" onClick={undo}>
+              <Icon name="undo" /> เลิกทำ
+            </button>
+          )}
         </div>
       )}
     </div>

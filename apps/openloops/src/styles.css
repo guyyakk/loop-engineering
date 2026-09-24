@@ -835,6 +835,132 @@ input.chip-date {
   border-top: 1px solid var(--border);
 }
 
+/* ---------- attention and follow-up ---------- */
+
+.attention {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.attention ul {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.att {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.att-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.att.att-danger .att-icon,
+.att.att-danger .att-kind {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.att.att-info .att-icon,
+.att.att-info .att-kind {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.att.att-warn .att-icon,
+.att.att-warn .att-kind {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.att-body {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.att-title {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.att-text {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.att-kind {
+  margin-right: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.att button {
+  flex: none;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.follow-up {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.follow-up[data-due='true'] {
+  border-color: var(--info);
+  background: var(--info-soft);
+}
+
+.follow-up-text {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 14px;
+  white-space: pre-line;
+  user-select: text;
+}
+
+.field-note {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.notify-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* ---------- week board ---------- */
 
 .week {

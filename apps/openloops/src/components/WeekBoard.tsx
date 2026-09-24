@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react'
-import { remainingMinutes, type DayColumn, type WeekPlan } from '../domain/capacity'
+import { remainingMinutes, type DayColumn, type PlannerSettings, type WeekPlan } from '../domain/capacity'
 import {
   WEEKDAY_SHORT,
   dueTone,
@@ -12,14 +12,16 @@ import {
   type DateKey,
 } from '../domain/dates'
 import { progress, type Loop, type PlanValue } from '../domain/loop'
+import { loopFlags } from '../domain/nudges'
 import { Chips } from './Chips'
 import { Icon } from './Icon'
-import { Dots, rolloverLabel } from './LoopCard'
+import { Dots, FlagBadges, rolloverLabel } from './LoopCard'
 import { CapacityBar, MEETINGS } from './TodayPanel'
 
 interface Props {
   plan: WeekPlan
   today: DateKey
+  settings: PlannerSettings
   weekStart: DateKey
   weekOffset: number
   onWeekOffset: (offset: number) => void
@@ -37,12 +39,14 @@ function weekTitle(offset: number): string {
 function BoardCard({
   loop,
   today,
+  settings,
   onOpen,
   onDragStart,
   onDragEnd,
 }: {
   loop: Loop
   today: DateKey
+  settings: PlannerSettings
   onOpen: (loop: Loop) => void
   onDragStart: (id: string) => void
   onDragEnd: () => void
@@ -50,6 +54,8 @@ function BoardCard({
   const { done, total } = progress(loop)
   const left = remainingMinutes(loop)
   const rollover = rolloverLabel(loop, today)
+  const flags = loopFlags(loop, today, settings)
+  const flagged = flags.mustStartSince !== null || flags.followUpDue || flags.stalledDays !== null
   return (
     <div
       className={`bcard status-${loop.status}`}
@@ -79,19 +85,20 @@ function BoardCard({
         )}
         {left !== null ? <span>{formatMinutes(left)}</span> : <span className="muted">ไม่ระบุเวลา</span>}
       </span>
-      {(loop.dueDate || loop.status === 'waiting' || loop.status === 'blocked' || rollover) && (
+      {(loop.dueDate || loop.status === 'waiting' || loop.status === 'blocked' || rollover || flagged) && (
         <span className="bcard-badges">
           {loop.status === 'waiting' && <span className="badge tone-info">รอ {loop.waitingOn}</span>}
           {loop.status === 'blocked' && <span className="badge tone-danger">ติดขัด</span>}
           {loop.dueDate && <span className={`badge due-${dueTone(loop.dueDate, today)}`}>{withDay('ส่ง', loop.dueDate, today)}</span>}
           {rollover && <span className={`badge ${loop.rolloverCount >= 3 ? 'tone-warn' : ''}`}>{rollover}</span>}
+          <FlagBadges flags={flags} today={today} blocked={loop.status === 'blocked'} />
         </span>
       )}
     </div>
   )
 }
 
-export function WeekBoard({ plan, today, weekStart, weekOffset, onWeekOffset, onOpen, onMove, onMeetingChange }: Props) {
+export function WeekBoard({ plan, today, settings, weekStart, weekOffset, onWeekOffset, onOpen, onMove, onMeetingChange }: Props) {
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<PlanValue | null>(null)
   const [meetingDay, setMeetingDay] = useState<DateKey | null>(null)
@@ -126,6 +133,7 @@ export function WeekBoard({ plan, today, weekStart, weekOffset, onWeekOffset, on
 
   const cardProps = {
     today,
+    settings,
     onOpen,
     onDragStart: setDragId,
     onDragEnd: () => {

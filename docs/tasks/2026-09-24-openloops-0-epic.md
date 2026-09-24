@@ -1,6 +1,6 @@
 # Epic: OpenLoops — planner ที่ไม่ยอมให้งานค้างกลางทาง (ร่าง)
 
-> สถานะ: **กำลังทำ** — spec 1–3 เสร็จ — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
+> สถานะ: **กำลังทำ** — spec 1–4 เสร็จ — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
 
 ## Outcome
 
@@ -44,7 +44,7 @@
 | 1 | [`2026-09-24-openloops-1-capture-and-loops.md`](2026-09-24-openloops-1-capture-and-loops.md) ✅ | โครงข้อมูล, ฟอร์มจดเร็ว, รายการลูปพร้อมขั้น, เก็บข้อมูลในเครื่อง | MVP |
 | 2 | [`2026-09-24-openloops-2-today-view.md`](2026-09-24-openloops-2-today-view.md) ✅ | หน้าวันนี้, แถบเวลาว่าง, งานยกมาจากเมื่อวาน | MVP |
 | 3 | [`2026-09-24-openloops-3-week-board.md`](2026-09-24-openloops-3-week-board.md) ✅ | หน้าสัปดาห์นี้, ลากงานลงวัน, ภาระงานรายวัน | MVP |
-| 4 | `...-openloops-4-nudge-engine.md` | กฎการเตือนข้างบน และ notification | MVP |
+| 4 | [`2026-09-24-openloops-4-nudge-engine.md`](2026-09-24-openloops-4-nudge-engine.md) ✅ (รอทดสอบแจ้งเตือนจริง) | กฎการเตือนข้างบน และ notification | MVP |
 | 5 | `...-openloops-5-rituals.md` | ปิดวัน และทบทวนสัปดาห์แบบ wizard | MVP |
 | 6 | `...-openloops-6-calendar.md` | ดึงประชุมจาก Google Calendar มาคำนวณเวลาว่าง, จองเวลาทำงานลงปฏิทิน | v2 |
 | 7 | `...-openloops-7-ai-assist.md` | จดงานด้วยภาษาไทยธรรมดา, แนะนำแผนเช้า, แตกงานใหญ่เป็นขั้น | v2 |
@@ -59,5 +59,5 @@
 
 ยังเปิดอยู่ (ใช้ค่าเริ่มต้นไปก่อน เปลี่ยนได้):
 
-3. ช่องทางเตือนหลัก: notification บนเครื่อง — ต้องตัดสินใจก่อนเริ่ม spec 4
+3. ช่องทางเตือนหลัก: notification บนเครื่อง (ใช้ใน spec 4 แล้ว)
 4. ตำแหน่งโค้ด: `apps/openloops/` ใน repo นี้

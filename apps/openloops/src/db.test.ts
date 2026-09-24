@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest'
 import {
   allLoops,
   getMeetingMinutes,
+  claimNotification,
   getMeetings,
+  getSent,
   getSettings,
   openDb,
   rollOverDay,
@@ -63,12 +65,13 @@ describe('db', () => {
   it('stores planner settings and meeting time per day', async () => {
     const db = openDb(uniqueName())
     expect(await getSettings(db)).toEqual(DEFAULT_SETTINGS)
-    await saveSettings({ workMinutes: 420, bufferMinutes: 30, workdays: [1, 2, 3, 4, 5, 6] }, db)
-    expect(await getSettings(db)).toEqual({ workMinutes: 420, bufferMinutes: 30, workdays: [1, 2, 3, 4, 5, 6] })
+    const custom = { ...DEFAULT_SETTINGS, workMinutes: 420, bufferMinutes: 30, workdays: [1, 2, 3, 4, 5, 6], notify: true }
+    await saveSettings(custom, db)
+    expect(await getSettings(db)).toEqual(custom)
 
-    // แถวตั้งค่าจาก spec 2 ที่ยังไม่มีวันทำงาน ต้องได้ค่าเริ่มต้น จ–ศ
+    // แถวตั้งค่าจาก spec 2 ที่ยังไม่มีค่าที่เพิ่มทีหลัง ต้องได้ค่าเริ่มต้น
     await db.settings.put({ key: 'planner', workMinutes: 480, bufferMinutes: 60 } as never)
-    expect((await getSettings(db)).workdays).toEqual([1, 2, 3, 4, 5])
+    expect(await getSettings(db)).toEqual({ ...DEFAULT_SETTINGS, workMinutes: 480, bufferMinutes: 60 })
 
     expect(await getMeetingMinutes('2026-09-24', db)).toBe(0)
     await saveMeetingMinutes('2026-09-24', 90, db)
@@ -89,6 +92,21 @@ describe('db', () => {
     expect(await rollOverDay('2026-09-24', DEFAULT_SETTINGS.workdays, db)).toBe(0)
     const [stored] = await allLoops(db)
     expect(stored).toMatchObject({ rolloverCount: 1, carriedOn: '2026-09-24', plannedDate: '2026-09-24' })
+    db.close()
+  })
+
+  it('sends each notification kind once per day, even when claimed concurrently', async () => {
+    const db = openDb(uniqueName())
+    await saveMeetingMinutes('2026-09-24', 60, db)
+    const claims = await Promise.all([1, 2, 3].map(() => claimNotification('2026-09-24', 'brief', db)))
+    expect(claims.filter(Boolean)).toHaveLength(1)
+    expect(await claimNotification('2026-09-24', 'shutdown', db)).toBe(true)
+    expect(await claimNotification('2026-09-24', 'shutdown', db)).toBe(false)
+    expect(await claimNotification('2026-09-25', 'brief', db)).toBe(true)
+    // เวลาประชุมเดิมต้องไม่หาย และตั้งเวลาประชุมใหม่ต้องไม่ล้างสถานะที่ส่งแล้ว
+    expect(await getMeetingMinutes('2026-09-24', db)).toBe(60)
+    await saveMeetingMinutes('2026-09-24', 90, db)
+    expect(Object.keys(await getSent('2026-09-24', db)).sort()).toEqual(['brief', 'shutdown'])
     db.close()
   })
 })

@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { remainingMinutes } from '../domain/capacity'
+import { remainingMinutes, type Particle, type PlannerSettings } from '../domain/capacity'
 import {
   addDays,
   dueTone,
@@ -28,6 +28,7 @@ import {
   type LoopStatus,
   type PlanValue,
 } from '../domain/loop'
+import { FOLLOW_UP_GAP, addWorkdays, followUpMessage, loopFlags, markFollowedUp, type LoopFlags } from '../domain/nudges'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
 import { ESTIMATE_OPTIONS } from './options'
@@ -41,7 +42,106 @@ interface Props {
   /** สถานะเปิด/ปิดอยู่ที่ App การ์ดจึงไม่หุบเมื่อย้ายกลุ่มหรือย้ายวัน */
   open: boolean
   onToggle: () => void
-  workdays: number[]
+  settings: PlannerSettings
+  onParticleChange: (particle: Particle) => void
+}
+
+const PARTICLES: ChipOption<Particle>[] = [
+  { value: '', label: 'ไม่ใส่' },
+  { value: 'ครับ', label: 'ครับ' },
+  { value: 'ค่ะ', label: 'ค่ะ' },
+]
+
+/** ป้ายเตือนจาก nudge: ใช้ทั้งการ์ดในหน้ารายการและบนบอร์ด */
+export function FlagBadges({ flags, today, blocked }: { flags: LoopFlags; today: DateKey; blocked: boolean }) {
+  return (
+    <>
+      {flags.mustStartSince && (
+        <span className="badge tone-danger">
+          <Icon name="flag" size={12} /> {flags.mustStartSince === today ? 'ต้องเริ่มวันนี้' : 'ควรเริ่มแล้ว'}
+        </span>
+      )}
+      {flags.followUpDue && (
+        <span className="badge tone-info">
+          <Icon name="user" size={12} /> ถึงวันตามงาน
+        </span>
+      )}
+      {flags.stalledDays !== null && (
+        <span className="badge tone-warn">
+          <Icon name="clock" size={12} /> {blocked ? 'ติดขัด' : 'นิ่ง'}มา {flags.stalledDays} วันทำการ
+        </span>
+      )}
+    </>
+  )
+}
+
+function copyWithSelection(text: string): boolean {
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const area = document.createElement('textarea')
+  area.value = text
+  area.setAttribute('readonly', '')
+  area.style.position = 'fixed'
+  area.style.opacity = '0'
+  // ต้องวางไว้ใน <dialog> ที่เปิดอยู่ ถ้ามี เพราะนอก dialog แบบ modal จะ focus ไม่ได้
+  const host = document.querySelector('dialog[open]') ?? document.body
+  host.appendChild(area)
+  area.select()
+  try {
+    return document.execCommand('copy')
+  } catch {
+    return false
+  } finally {
+    area.remove()
+    previous?.focus()
+  }
+}
+
+function FollowUp({
+  loop,
+  today,
+  settings,
+  due,
+  onParticleChange,
+  onFollowedUp,
+}: {
+  loop: Loop
+  today: DateKey
+  settings: PlannerSettings
+  due: boolean
+  onParticleChange: (particle: Particle) => void
+  onFollowedUp: () => void
+}) {
+  const [copy, setCopy] = useState<'idle' | 'done' | 'failed'>('idle')
+  const message = followUpMessage(loop, today, settings.particle)
+  const nextTime = addWorkdays(today, FOLLOW_UP_GAP, settings.workdays)
+
+  async function copyMessage() {
+    try {
+      await navigator.clipboard.writeText(message)
+      setCopy('done')
+    } catch {
+      // บางหน้าต่าง (เช่น iframe หรือ browser ที่ไม่ให้สิทธิ์ clipboard) ใช้วิธีเดิมของ browser แทน
+      setCopy(copyWithSelection(message) ? 'done' : 'failed')
+    }
+  }
+
+  return (
+    <div className="follow-up" data-due={due}>
+      <span className="field-label">{due ? 'ถึงวันตามงานแล้ว ข้อความที่ร่างไว้' : 'ร่างข้อความตามงาน'}</span>
+      <Chips label="คำลงท้าย" options={PARTICLES} value={settings.particle} onChange={onParticleChange} />
+      <p className="follow-up-text">{message}</p>
+      {copy === 'failed' && <p className="field-error">คัดลอกอัตโนมัติไม่ได้ เลือกข้อความแล้วคัดลอกเอง</p>}
+      <div className="row-end">
+        <button type="button" onClick={copyMessage}>
+          <Icon name={copy === 'done' ? 'check' : 'edit'} /> {copy === 'done' ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
+        </button>
+        <button type="button" className="primary" onClick={onFollowedUp}>
+          ตามแล้ว
+        </button>
+      </div>
+      <p className="field-note muted">กด "ตามแล้ว" แอปจะเตือนให้ตามอีกครั้ง{withDay('', nextTime, today)} ข้อความต้องส่งเอง แอปไม่ส่งให้</p>
+    </div>
+  )
 }
 
 const STATUSES: LoopStatus[] = ['active', 'waiting', 'blocked', 'done', 'dropped']
@@ -94,7 +194,8 @@ export function Dots({ done, total }: { done: number; total: number }) {
   )
 }
 
-export function LoopCard({ loop, today, onChange, onEdit, onPostpone, open, onToggle, workdays }: Props) {
+export function LoopCard({ loop, today, onChange, onEdit, onPostpone, open, onToggle, settings, onParticleChange }: Props) {
+  const { workdays } = settings
   const [newStepText, setNewStepText] = useState('')
   const [waitingDraft, setWaitingDraft] = useState<{ waitingOn: string; followUpDate: DateKey | null } | null>(null)
   const [waitingErrors, setWaitingErrors] = useState<ReturnType<typeof validateWaiting>>({})
@@ -110,6 +211,7 @@ export function LoopCard({ loop, today, onChange, onEdit, onPostpone, open, onTo
   const postponeDate = nextWorkday(today, workdays)
   const plans = planOptions(today)
   const plan = planValueOf(loop, today)
+  const flags = loopFlags(loop, today, settings)
 
   const followUpOptions = (
     [
@@ -204,6 +306,7 @@ export function LoopCard({ loop, today, onChange, onEdit, onPostpone, open, onTo
                 <Icon name="repeat" size={12} /> {rollover}
               </span>
             )}
+            <FlagBadges flags={flags} today={today} blocked={loop.status === 'blocked'} />
           </span>
           <span className="loop-sub">
             {loop.status !== 'waiting' && !closed && <Dots done={done} total={total} />}
@@ -279,6 +382,17 @@ export function LoopCard({ loop, today, onChange, onEdit, onPostpone, open, onTo
               onChange={pickStatus}
             />
           </div>
+
+          {loop.status === 'waiting' && !waitingDraft && (
+            <FollowUp
+              loop={loop}
+              today={today}
+              settings={settings}
+              due={flags.followUpDue}
+              onParticleChange={onParticleChange}
+              onFollowedUp={() => change(markFollowedUp(loop, new Date(), workdays))}
+            />
+          )}
 
           {waitingDraft && (
             <div className="waiting-form">

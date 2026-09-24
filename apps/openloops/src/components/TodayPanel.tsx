@@ -4,6 +4,7 @@ import { WEEKDAY_SHORT, formatMinutes, withDay, type DateKey } from '../domain/d
 import type { Loop } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
+import { NotifySettings } from './NotifySettings'
 
 interface Props {
   load: DayLoad
@@ -15,6 +16,7 @@ interface Props {
   onMeetingChange: (minutes: number) => void
   onSettingsChange: (settings: PlannerSettings) => void
   onPostpone: (loops: Loop[]) => void
+  onTestNotification: () => void
 }
 
 const hours = (h: number[]) => h.map((x) => ({ value: x * 60, label: formatMinutes(x * 60) }))
@@ -86,7 +88,17 @@ export function CapacityBar({ load, label, compact = false }: { load: DayLoad; l
   )
 }
 
-export function TodayPanel({ load, today, settings, hasTodayLoops, postponeDate, onMeetingChange, onSettingsChange, onPostpone }: Props) {
+export function TodayPanel({
+  load,
+  today,
+  settings,
+  hasTodayLoops,
+  postponeDate,
+  onMeetingChange,
+  onSettingsChange,
+  onPostpone,
+  onTestNotification,
+}: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const ids = useId()
   const text = message(load, hasTodayLoops)
@@ -104,7 +116,7 @@ export function TodayPanel({ load, today, settings, hasTodayLoops, postponeDate,
           aria-controls={`${ids}-settings`}
           onClick={() => setShowSettings((v) => !v)}
         >
-          <Icon name="settings" /> ตั้งเวลาทำงาน
+          <Icon name="settings" /> ตั้งเวลาและการแจ้งเตือน
         </button>
       </div>
 
@@ -215,6 +227,7 @@ export function TodayPanel({ load, today, settings, hasTodayLoops, postponeDate,
               onChange={(bufferMinutes) => onSettingsChange({ ...settings, bufferMinutes })}
             />
           </div>
+          <NotifySettings settings={settings} onChange={onSettingsChange} onTest={onTestNotification} />
         </div>
       )}
     </section>
