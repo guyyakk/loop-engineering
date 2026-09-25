@@ -15,6 +15,7 @@ const PATHS = {
   arrow: 'M5 12h14M13 6l6 6-6 6',
   download: 'M12 4v12M6 10l6 6 6-6M5 20h14',
   repeat: 'M4 12V9a3 3 0 0 1 3-3h13M17 3l3 3-3 3M20 12v3a3 3 0 0 1-3 3H4M7 21l-3-3 3-3',
+  sparkle: 'M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9zM18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z',
 } as const
 
 export type IconName = keyof typeof PATHS

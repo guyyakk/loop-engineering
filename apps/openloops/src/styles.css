@@ -1871,3 +1871,138 @@ dialog.sheet::backdrop {
     transition: none !important;
   }
 }
+
+/* ---------- AI assist ---------- */
+
+.ai-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.chip.ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip.ai-btn:disabled {
+  opacity: 0.6;
+}
+
+.ai-suggest {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.ai-suggest legend {
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.ai-suggest label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.ai-suggest label input {
+  margin-top: 3px;
+}
+
+.ai-suggest label span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-assist {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.plan-assist.is-open {
+  padding: 14px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.pa-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pa-head h2 {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.pa-summary {
+  font-size: 14px;
+}
+
+.pa-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+  font-size: 14px;
+}
+
+.pa-postpone .pa-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+.pa-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.pa-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.pa-reason {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.pa-move {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.pa-postpone .pa-move {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pa-postpone .pa-reason {
+  padding-left: 26px;
+}

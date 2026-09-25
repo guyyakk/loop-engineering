@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import { DEFAULT_AI_CONFIG, type AiConfig } from './domain/ai'
 import { DEFAULT_SETTINGS, type DayBusy, type PlannerSettings } from './domain/capacity'
 import { toDateKey, type DateKey } from './domain/dates'
 import type { DayPatch, DayPlan } from './domain/day'
@@ -13,10 +14,16 @@ interface SettingsRow extends PlannerSettings {
   key: 'planner'
 }
 
+/** ค่าที่อยู่เฉพาะเครื่องนี้ (เช่น API key) ไม่อยู่ในไฟล์สำรองและไม่ถูกแทนที่ตอนนำเข้า */
+interface LocalRow extends AiConfig {
+  key: 'ai'
+}
+
 export type OpenLoopsDB = Dexie & {
   loops: EntityTable<Loop, 'id'>
   days: EntityTable<DayPlan, 'date'>
   settings: EntityTable<SettingsRow, 'key'>
+  local: EntityTable<LocalRow, 'key'>
 }
 
 export function openDb(name = 'openloops'): OpenLoopsDB {
@@ -36,6 +43,7 @@ export function openDb(name = 'openloops'): OpenLoopsDB {
           loop.carriedOn = null
         })
     })
+  db.version(3).stores({ local: 'key' })
   return db
 }
 
@@ -63,6 +71,15 @@ export async function getSettings(target: OpenLoopsDB = db): Promise<PlannerSett
 
 export async function saveSettings(settings: PlannerSettings, target: OpenLoopsDB = db): Promise<void> {
   await target.settings.put({ key: 'planner', ...settings })
+}
+
+export async function getAiConfig(target: OpenLoopsDB = db): Promise<AiConfig> {
+  const row = await target.local.get('ai')
+  return { apiKey: row?.apiKey || null, model: row?.model || DEFAULT_AI_CONFIG.model }
+}
+
+export async function saveAiConfig(config: AiConfig, target: OpenLoopsDB = db): Promise<void> {
+  await target.local.put({ key: 'ai', apiKey: config.apiKey?.trim() || null, model: config.model })
 }
 
 export async function getMeetingMinutes(date: DateKey, target: OpenLoopsDB = db): Promise<number> {

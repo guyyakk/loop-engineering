@@ -1,11 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { makeAssist } from './aiClient'
 import { CaptureForm } from './components/CaptureForm'
 import { DataPage, type ImportMode } from './components/DataPage'
 import { Icon, Logo } from './components/Icon'
 import { LoopCard } from './components/LoopCard'
 import { ShutdownWizard, type RitualResult } from './components/ShutdownWizard'
 import { Attention } from './components/Attention'
+import { PlanAssist } from './components/PlanAssist'
 import { TodayPanel } from './components/TodayPanel'
 import { WeekBoard } from './components/WeekBoard'
 import { WeeklyReview } from './components/WeeklyReview'
@@ -13,6 +15,7 @@ import {
   allLoops,
   claimNotification,
   commitRitual,
+  getAiConfig,
   getDays,
   getBusy,
   getBusyRange,
@@ -22,6 +25,7 @@ import {
   readAll,
   replaceAll,
   rollOverDay,
+  saveAiConfig,
   saveLoop,
   saveLoops,
   saveMeetingMinutes,
@@ -143,6 +147,7 @@ export function App() {
   const [toast, setToast] = useState<Toast | null>(null)
   const [dismissedOn, setDismissedOn] = useState<string | null>(readDismissed)
   const calendar = useCalendar(settings, storedSettings !== undefined, today)
+  const aiConfig = useLiveQuery(() => getAiConfig(), [])
   const dialogRef = useRef<HTMLDialogElement>(null)
   const detailRef = useRef<HTMLDialogElement>(null)
 
@@ -157,6 +162,14 @@ export function App() {
     [loops, weekStart, today, settings, meetings],
   )
   const nudges = useMemo(() => nudgesFor(loops ?? [], today, settings), [loops, today, settings])
+  const workdays = settings.workdays
+  const ai = useMemo(
+    () =>
+      aiConfig?.apiKey
+        ? makeAssist({ apiKey: aiConfig.apiKey, model: aiConfig.model }, { today, workdays, projects })
+        : null,
+    [aiConfig, today, workdays, projects],
+  )
   const postponeDate = nextWorkday(today, settings.workdays)
   const detail = detailId ? (loops ?? []).find((l) => l.id === detailId) ?? null : null
   const shutdownAt = weekRows?.find((d) => d.date === today)?.shutdownAt
@@ -263,6 +276,11 @@ export function App() {
     if (target !== 'week' && target !== 'later' && target < today) return
     await saveLoop(applyPlan(loop, target, new Date()))
     setToast({ message: `ย้าย "${loop.title}" ไป${planLabel(target, today)}แล้ว`, undo: () => saveLoops([loop]) })
+  }
+
+  async function applyPlanFromAi(changed: Loop[], previous: Loop[]) {
+    await saveLoops(changed)
+    setToast({ message: `ใช้แผนจาก AI แล้ว ย้าย ${changed.length} งาน`, undo: () => saveLoops(previous), long: true })
   }
 
   async function undo() {
@@ -486,7 +504,22 @@ export function App() {
             onPostpone={postpone}
             onTestNotification={() => void testNotification()}
             calendar={calendar}
+            aiConfig={aiConfig}
+            onAiConfigChange={(next) => void saveAiConfig(next)}
           />
+
+          {ai && openCount > 0 && (
+            <PlanAssist
+              loops={loops}
+              today={today}
+              settings={settings}
+              load={load}
+              busy={todayBusy}
+              postponeDate={postponeDate}
+              ai={ai}
+              onApply={(changed, previous) => void applyPlanFromAi(changed, previous)}
+            />
+          )}
 
           {(['today', 'week', 'later'] as const).map((h) => (
             <section key={h} className="section" aria-labelledby={`sec-${h}`}>
@@ -535,6 +568,7 @@ export function App() {
             today={today}
             onSave={handleSave}
             onCancel={() => setEditing(null)}
+            ai={ai}
           />
         )}
       </dialog>

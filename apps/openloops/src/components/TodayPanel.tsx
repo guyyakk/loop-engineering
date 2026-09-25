@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import type { AiConfig } from '../domain/ai'
 import { isStale } from '../domain/calendar'
 import { remainingMinutes, suggestPostpone, type DayLoad, type PlannerSettings } from '../domain/capacity'
 import { WEEKDAY_SHORT, formatMinutes, withDay, type DateKey } from '../domain/dates'
@@ -6,6 +7,7 @@ import { formatClock } from '../domain/nudges'
 import type { Loop } from '../domain/loop'
 import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
+import { AiSettings } from './AiSettings'
 import { CalendarSettings, syncedText } from './CalendarSettings'
 import { NotifySettings } from './NotifySettings'
 import type { CalendarControls } from '../useCalendar'
@@ -24,6 +26,9 @@ interface Props {
   onPostpone: (loops: Loop[]) => void
   onTestNotification: () => void
   calendar: CalendarControls
+  /** undefined = กำลังโหลด */
+  aiConfig: AiConfig | undefined
+  onAiConfigChange: (config: AiConfig) => void
 }
 
 const minutesOf = (iso: string) => {
@@ -124,6 +129,8 @@ export function TodayPanel({
   onPostpone,
   onTestNotification,
   calendar,
+  aiConfig,
+  onAiConfigChange,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const ids = useId()
@@ -274,6 +281,7 @@ export function TodayPanel({
           </div>
           <NotifySettings settings={settings} onChange={onSettingsChange} onTest={onTestNotification} />
           <CalendarSettings settings={settings} onSettingsChange={onSettingsChange} calendar={calendar} />
+          {aiConfig && <AiSettings config={aiConfig} onChange={onAiConfigChange} />}
           <a className="button data-link" href="#data">
             <Icon name="folder" /> ข้อมูลและการสำรอง
           </a>

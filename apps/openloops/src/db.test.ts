@@ -8,6 +8,7 @@ import {
   clearCalendarBusy,
   commitRitual,
   getBusy,
+  getAiConfig,
   getBusyRange,
   getDays,
   getMeetings,
@@ -18,6 +19,7 @@ import {
   readAll,
   replaceAll,
   rollOverDay,
+  saveAiConfig,
   saveLoop,
   saveCalendarBusy,
   saveLoops,
@@ -219,6 +221,22 @@ describe('db', () => {
     await clearCalendarBusy(db)
     expect(await getBusy('2026-09-24', db)).toEqual({ manual: 30, calendar: null })
     expect(await getBusy('2026-09-25', db)).toEqual({ manual: 0, calendar: null })
+    db.close()
+  })
+
+  it('keeps the AI key on this device only: not in snapshots, and not wiped by a replace import', async () => {
+    const db = openDb(uniqueName())
+    expect(await getAiConfig(db)).toEqual({ apiKey: null, model: 'claude-opus-5-5' })
+    await saveAiConfig({ apiKey: ' sk-ant-secret-1234567890abcdefghij ', model: 'claude-sonnet-5' }, db)
+    expect(await getAiConfig(db)).toEqual({ apiKey: 'sk-ant-secret-1234567890abcdefghij', model: 'claude-sonnet-5' })
+
+    const snapshot = await readAll(db)
+    expect(JSON.stringify(snapshot)).not.toContain('sk-ant-')
+    await replaceAll({ loops: [], days: [], settings: DEFAULT_SETTINGS }, db)
+    expect((await getAiConfig(db)).apiKey).toBe('sk-ant-secret-1234567890abcdefghij')
+
+    await saveAiConfig({ apiKey: null, model: 'claude-sonnet-5' }, db)
+    expect((await getAiConfig(db)).apiKey).toBeNull()
     db.close()
   })
 })

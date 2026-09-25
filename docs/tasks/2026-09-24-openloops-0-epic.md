@@ -1,6 +1,6 @@
 # Epic: OpenLoops — planner ที่ไม่ยอมให้งานค้างกลางทาง (ร่าง)
 
-> สถานะ: **กำลังทำ** — spec 1–6 เสร็จ (MVP ครบ พร้อมการสำรองข้อมูล) — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
+> สถานะ: **กำลังทำ** — spec 1–8 เสร็จ (MVP ครบ พร้อมการสำรองข้อมูล, Google Calendar และผู้ช่วย AI) — spec หลักตัวนี้เป็นตัวเชื่อมไปยัง spec ย่อยเท่านั้น ตามหัวข้อ "Scale" ใน [LOOP_WORKFLOW.md](../LOOP_WORKFLOW.md) จึงไม่มี acceptance criteria ของตัวเอง
 
 ## Outcome
 
@@ -48,7 +48,7 @@
 | 5 | [`2026-09-24-openloops-5-rituals.md`](2026-09-24-openloops-5-rituals.md) ✅ | ปิดวัน และทบทวนสัปดาห์แบบ wizard | MVP |
 | 6 | [`2026-09-25-openloops-6-backup.md`](2026-09-25-openloops-6-backup.md) ✅ | ส่งออก/นำเข้าไฟล์สำรอง, เตือนให้สำรอง (แทรกตามที่ผู้ใช้ขอ หลังเห็นข้อมูลใน browser หาย) | MVP |
 | 7 | [`2026-09-25-openloops-7-calendar.md`](2026-09-25-openloops-7-calendar.md) ✅ (รอทดสอบ login Google จริง) | ดึงช่วงไม่ว่างจาก Google Calendar มาคำนวณเวลาว่าง (จองเวลาทำงานลงปฏิทินแยกไป spec ภายหลัง เพราะต้องใช้สิทธิ์เขียน) | v2 |
-| 8 | `...-openloops-8-ai-assist.md` | จดงานด้วยภาษาไทยธรรมดา, แนะนำแผนเช้า, แตกงานใหญ่เป็นขั้น | v2 |
+| 8 | [`2026-09-25-openloops-8-ai-assist.md`](2026-09-25-openloops-8-ai-assist.md) ✅ (รอทดสอบกับ Claude API จริง) | จดงานด้วยภาษาไทยธรรมดา, แนะนำแผนเช้า, แตกงานใหญ่เป็นขั้น (Claude API ด้วย key ของผู้ใช้) | v2 |
 | 9 | `...-openloops-9-desktop-and-line.md` | แอป tray/แถบลอยบน Windows, hotkey จดงาน, แจ้งเตือนผ่าน LINE | v3 |
 
 ## Human decision needed
