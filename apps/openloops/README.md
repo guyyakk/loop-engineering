@@ -20,6 +20,17 @@ npm run build && npm run preview   # ลองแบบ PWA จริง (http:/
 
 ผู้ช่วย AI (ไม่บังคับ): ใน "ตั้งเวลาและการแจ้งเตือน" → ผู้ช่วย AI ใส่ Claude API key ของคุณเอง (สร้างที่ console.anthropic.com และตั้งวงเงินไว้) แล้วจะมีปุ่ม "ให้ AI แยกรายละเอียด" / "ให้ AI ช่วยแตกขั้น" ในฟอร์มจดงาน และ "ให้ AI จัดแผนวันนี้" ในหน้าวันนี้ key เก็บเฉพาะในเครื่องนี้ (ตาราง `local`) ไม่อยู่ในไฟล์สำรอง แอปส่งข้อมูลไป Anthropic เฉพาะตอนกดปุ่ม AI และทุกผลลัพธ์ต้องกดยืนยันก่อนบันทึก
 
+## แอป Windows (Tauri)
+
+ต้องมี [Rust](https://rustup.rs) และ Visual Studio Build Tools (C++) ในเครื่องก่อน
+
+```bash
+npm run desktop:dev     # เปิดแอป Windows แบบพัฒนา
+npm run desktop:build   # ได้ตัวติดตั้ง .exe ที่ src-tauri/target/release/bundle/nsis/
+```
+
+ปิดหน้าต่างแล้วแอปยังอยู่ที่ tray, กด Ctrl+Alt+N จากโปรแกรมไหนก็ได้เพื่อจดงานด่วน, แจ้งเตือนเป็นแจ้งเตือนของ Windows ข้อมูลของแอปแยกจาก browser: ส่งออกไฟล์สำรองจาก browser แล้วนำเข้าในแอป
+
 ## ตรวจ
 
 ```bash
@@ -39,4 +50,5 @@ npm run build
 - `src/domain/ai.ts` — คำขอและการตรวจผลของผู้ช่วย AI (จดงานจากประโยค, แตกขั้น, แผนเช้า); `src/aiClient.ts` — เรียก Claude Messages API จาก browser
 - `src/notifier.ts` + `public/sw-notify.js` — แจ้งเตือนบนเครื่อง (ทำงานเฉพาะตอนที่แอปเปิดอยู่ เพราะไม่มี server)
 - `src/components/` — ฟอร์มจดงาน, การ์ดลูป, กล่องสิ่งที่ต้องดู, แผงวันนี้, บอร์ดสัปดาห์ (`#week`), หน้าปิดวันและทบทวนสัปดาห์, ปุ่มตัวเลือก
+- `src-tauri/` — แอป Windows (Tauri 2): tray, ปุ่มลัด, single instance, เปิดพร้อม Windows; `src/desktop.ts` + `src/QuickApp.tsx` — ฝั่งหน้าเว็บของแอป Windows
 - `scripts/make-icons.mjs` — สร้างไอคอน PNG ของ PWA (`npm run icons`)

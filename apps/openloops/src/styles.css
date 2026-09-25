@@ -2006,3 +2006,10 @@ dialog.sheet::backdrop {
 .pa-postpone .pa-reason {
   padding-left: 26px;
 }
+
+/* ---------- desktop quick capture window ---------- */
+
+.quick-app {
+  min-height: 100dvh;
+  background: var(--surface);
+}

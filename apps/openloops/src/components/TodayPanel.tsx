@@ -9,8 +9,10 @@ import { Chips, type ChipOption } from './Chips'
 import { Icon } from './Icon'
 import { AiSettings } from './AiSettings'
 import { CalendarSettings, syncedText } from './CalendarSettings'
+import { DesktopSettings } from './DesktopSettings'
 import { NotifySettings } from './NotifySettings'
 import type { CalendarControls } from '../useCalendar'
+import { isDesktop } from '../desktop'
 
 interface Props {
   load: DayLoad
@@ -235,6 +237,7 @@ export function TodayPanel({
 
       {showSettings && (
         <div className="tp-settings" id={`${ids}-settings`}>
+          {isDesktop() && <DesktopSettings />}
           <div className="field">
             <span className="field-label">ชั่วโมงทำงานต่อวัน</span>
             <Chips

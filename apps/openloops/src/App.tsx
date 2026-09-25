@@ -54,6 +54,7 @@ import {
 } from './domain/loop'
 import { briefMessage, nudgesFor, pendingNotifications, shutdownMessage } from './domain/nudges'
 import { reviewDue } from './domain/rituals'
+import { isDesktop } from './desktop'
 import { downloadText } from './download'
 import { permissionState, showNotification } from './notifier'
 import { useCalendar } from './useCalendar'
@@ -398,6 +399,12 @@ export function App() {
         <section className="empty">
           <h2>เริ่มจากจดงานแรกของคุณ</h2>
           <p>งานที่ยังไม่เสร็จทุกชิ้นจะอยู่ตรงนี้ จนกว่าคุณจะปิดมันเองอย่างตั้งใจ ไม่มีงานไหนหายไปเงียบ ๆ</p>
+          {isDesktop() && (
+            <p className="field-note">
+              เคยใช้ OpenLoops ใน browser มาก่อน? ข้อมูลของแอปนี้แยกจาก browser ส่งออกไฟล์สำรองจาก browser แล้ว{' '}
+              <a href="#data">นำเข้าที่นี่</a>
+            </p>
+          )}
           <button type="button" className="primary" onClick={() => openCapture('today')}>
             <Icon name="plus" /> จดงาน
           </button>

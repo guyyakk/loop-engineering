@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { PlannerSettings } from '../domain/capacity'
 import { formatClock } from '../domain/nudges'
+import { isDesktop } from '../desktop'
 import { permissionState, requestPermission, type PermissionState } from '../notifier'
 import { Chips, type ChipOption } from './Chips'
 
@@ -63,7 +64,11 @@ export function NotifySettings({ settings, onChange, onTest }: Props) {
         <p className="field-note" role="status">
           {statusText(permission, on, settings)}
         </p>
-        <p className="field-note muted">แอปไม่มี server จึงเตือนได้เฉพาะตอนที่เปิดแอปไว้ ย่อหน้าต่างไว้ได้</p>
+        <p className="field-note muted">
+          {isDesktop()
+            ? 'ปิดหน้าต่างแล้วแอปยังอยู่ที่ tray จึงยังเตือนได้ ถ้ากดออกจากแอปที่ tray จะไม่เตือน'
+            : 'แอปไม่มี server จึงเตือนได้เฉพาะตอนที่เปิดแอปไว้ ย่อหน้าต่างไว้ได้'}
+        </p>
       </div>
       <div className="field">
         <span className="field-label">

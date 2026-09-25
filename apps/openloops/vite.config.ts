@@ -3,10 +3,12 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({
+      // แอป Windows (Tauri) ไม่ใช้ service worker: ไฟล์อยู่ในตัวแอปแล้ว และแจ้งเตือนผ่าน Windows
+      disable: mode === 'desktop',
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       includeAssets: ['icon.svg'],
@@ -32,8 +34,10 @@ export default defineConfig({
       },
     }),
   ],
+  // Tauri เปิดหน้า dev ที่พอร์ตนี้ ห้ามขยับไปพอร์ตอื่นเอง
+  server: { port: 5173, strictPort: true },
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
   },
-})
+}))

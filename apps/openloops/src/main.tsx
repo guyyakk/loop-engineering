@@ -6,12 +6,15 @@ import './styles.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { QuickApp } from './QuickApp'
 import { requestPersistentStorage } from './db'
+import { QUICK_WINDOW, hideWindow, onQuickCapture, windowLabel } from './desktop'
+
+// แอป Windows มีหน้าต่างจดงานด่วนแยก ใช้หน้าเว็บเดียวกันแต่แสดงแค่ฟอร์ม
+const quick = windowLabel() === QUICK_WINDOW
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <StrictMode>{quick ? <QuickApp onHide={() => void hideWindow()} onShow={onQuickCapture} /> : <App />}</StrictMode>,
 )
 
-void requestPersistentStorage()
+if (!quick) void requestPersistentStorage()

@@ -16,6 +16,7 @@ desktop.ini
 # Node
 node_modules/
 dist/
+dist-desktop/
 build/
 npm-debug.log*
 

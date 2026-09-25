@@ -1,0 +1,3 @@
+# ผลการ build ของ Rust และ schema ที่ Tauri สร้างเอง
+/target/
+/gen/schemas

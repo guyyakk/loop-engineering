@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenLoops",
+  "version": "0.1.0",
+  "identifier": "app.openloops.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build:desktop",
+    "frontendDist": "../dist-desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "OpenLoops",
+        "width": 1100,
+        "height": 820,
+        "minWidth": 360,
+        "minHeight": 480,
+        "center": true,
+        "visible": false
+      },
+      {
+        "label": "quick",
+        "title": "จดงานด่วน · OpenLoops",
+        "width": 480,
+        "height": 640,
+        "resizable": false,
+        "center": true,
+        "visible": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+  }
+}
