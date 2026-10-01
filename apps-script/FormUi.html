@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<style>
+  :root { --line:#dee2e6; --muted:#868e96; --blue:#1971c2; --bg:#f8f9fa; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:0 0 64px; font-family:'Sarabun',Arial,sans-serif; font-size:14px; color:#212529; background:var(--bg); }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:12px; }
+  h2 { font-size:14px; margin:0 0 10px; color:var(--blue); }
+  h2 small { color:var(--muted); font-weight:normal; margin-left:6px; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
+  input, select, textarea { width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:5px;
+    font-family:inherit; font-size:14px; background:#fff; }
+  input:focus, select:focus, textarea:focus { outline:2px solid #a5d8ff; border-color:var(--blue); }
+  textarea { resize:vertical; min-height:60px; }
+  .grid { display:grid; gap:10px; }
+  .g3 { grid-template-columns:2fr 1fr 1fr; }
+  .g4 { grid-template-columns:1fr 1fr 1fr 1fr; }
+  .people { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; }
+  .dept { border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin-bottom:8px; background:#fff; }
+  .dept summary { cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px; }
+  .dept summary .muted { color:var(--muted); font-weight:normal; }
+  .dept .pick { margin-left:auto; font-size:12px; color:var(--muted); }
+  .dept .pick.has { color:var(--blue); font-weight:bold; }
+  .alldept { font-size:12px; color:var(--blue); cursor:pointer; text-decoration:underline; margin-left:4px; }
+  .addbox { border:1px dashed var(--blue); border-radius:8px; padding:12px; margin-top:8px; background:#f8fbff; }
+  .chip { border:1px solid var(--line); border-radius:16px; padding:5px 12px; cursor:pointer; background:#fff; user-select:none; }
+  .chip.on { background:#e7f5ff; border-color:var(--blue); color:var(--blue); font-weight:bold; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:12px; color:var(--muted); font-weight:normal; padding:0 4px 4px; }
+  td { padding:3px 4px; vertical-align:top; }
+  td.n { width:26px; color:var(--muted); text-align:right; padding-top:11px; font-size:12px; }
+  td.x { width:30px; }
+  #rows .note { margin-top:4px; font-size:12px; color:#5c6670; background:#fbfbfc; }
+  .del { border:0; background:none; color:#c92a2a; cursor:pointer; font-size:16px; padding:6px 4px; }
+  button { font-family:inherit; font-size:14px; }
+  .add { border:1px dashed var(--line); background:#fff; border-radius:6px; padding:8px 14px; cursor:pointer; color:var(--blue); margin-top:8px; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--line);
+    padding:10px 16px; display:flex; align-items:center; gap:10px; }
+  .bar .sp { flex:1; font-size:12px; color:var(--muted); }
+  .btn { padding:9px 16px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; }
+  .btn.primary { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:bold; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .msg { margin:12px; padding:10px 14px; border-radius:6px; font-size:13px; white-space:pre-wrap; display:none; }
+  .msg.err { background:#fff5f5; border:1px solid #ffc9c9; color:#c92a2a; }
+  .msg.ok  { background:#ebfbee; border:1px solid #b2f2bb; color:#2b8a3e; }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  .confirm { display:none; margin:12px; padding:14px 16px; border:1px solid #ffe066;
+    background:#fff9db; border-radius:8px; font-size:13px; line-height:1.7; }
+  .confirm b { color:#212529; }
+  .mode { margin-left:10px; padding:3px 9px; border-radius:12px; font-size:12px; white-space:nowrap; }
+  .mode.test { background:#fff9db; border:1px solid #ffe066; color:#856404; }
+  .mode.live { background:#fff5f5; border:1px solid #ffc9c9; color:#c92a2a; font-weight:bold; }
+  .mode a { margin-left:6px; cursor:pointer; text-decoration:underline; }
+  .build { margin-left:10px; font-size:11px; color:var(--muted); white-space:nowrap; }
+  .result { margin:12px; padding:14px 16px; border:1px solid #b2f2bb; background:#ebfbee; border-radius:8px; display:none; }
+  .result h3 { margin:0 0 8px; font-size:14px; color:#2b8a3e; }
+  .result .row { margin:8px 0; }
+  .shot { display:block; width:100%; max-width:640px; border:1px solid var(--line);
+    border-radius:6px; background:#fff; }
+  .link { display:inline-block; background:var(--blue); color:#fff; padding:9px 16px; border-radius:6px;
+    text-decoration:none; font-weight:bold; }
+  @media (max-width: 720px) {
+    .g3, .g4 { grid-template-columns:1fr 1fr; }
+    table, thead, tbody, tr, td, th { display:block; }
+    thead { display:none; }
+    #rows tr { border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:10px; position:relative; }
+    td.n { position:absolute; right:34px; top:6px; padding:0; }
+    td.x { position:absolute; right:6px; top:2px; }
+    td { padding:3px 0; }
+    .bar { flex-wrap:wrap; }
+    .bar .sp { flex-basis:100%; margin-bottom:6px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="msg" class="msg"></div>
+
+<div id="confirm" class="confirm">
+  <div id="confirmText"></div>
+  <div style="margin-top:12px">
+    <button class="btn primary" onclick="confirmYes()">ยืนยัน</button>
+    <button class="btn" onclick="confirmNo()">ยกเลิก</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>ข้อมูลประชุม <small id="mid"></small></h2>
+  <div class="grid">
+    <div><label>ชื่อการประชุม *</label><input id="title" placeholder="เช่น Weekly Production Review"></div>
+    <div class="grid g4">
+      <div><label>วันที่ *</label><input id="date" type="date"></div>
+      <div><label>เริ่ม</label><input id="start_time" type="time"></div>
+      <div><label>จบ</label><input id="end_time" type="time"></div>
+      <div><label>สถานที่</label><input id="location" placeholder="ห้อง A / Zoom"></div>
+    </div>
+    <div class="grid g4">
+      <div><label>ประธาน</label><select id="chair"></select></div>
+      <div><label>ผู้จดบันทึก *</label><select id="note_taker"></select></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>ผู้เข้าร่วม <small id="peopleTotal">ยังไม่ได้เลือกใคร</small></h2>
+  <div id="people"></div>
+
+  <a id="addPersonToggle" class="alldept" style="display:inline-block;margin-top:8px"
+     onclick="toggleAddPerson(true)">+ มีคนมาเพิ่ม พิมพ์ชื่อเข้าไปเลย</a>
+
+  <div id="addPerson" class="addbox" hidden>
+    <div class="grid g3">
+      <div><label>ชื่อ *</label><input id="newName" placeholder="ชื่อที่ใช้เรียกในทีม"></div>
+      <div><label>แผนก</label><input id="newDept" list="deptList" placeholder="เช่น QC / แขกภายนอก"></div>
+      <div><label>อีเมล (ไม่บังคับ)</label><input id="newEmail" type="email" placeholder="ใส่ทีหลังได้"></div>
+    </div>
+    <datalist id="deptList"></datalist>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn primary" id="btnAddPerson" onclick="submitNewPerson()">เพิ่มและเลือกเป็นผู้เข้าร่วม</button>
+      <button class="btn" onclick="toggleAddPerson(false)">ปิด</button>
+      <span id="addPersonMsg" class="hint" style="margin:0"></span>
+    </div>
+    <div class="hint">คนที่เพิ่มจะถูกบันทึกลงชีต people จริง จึงรับงานและรับอีเมลได้ในครั้งต่อ ๆ ไป
+      · ไม่ใส่อีเมลก็เพิ่มได้ แต่คนนั้นจะไม่ได้รับสรุปทางเมล</div>
+  </div>
+
+  <div id="dupWarn" class="hint" style="color:#c92a2a"></div>
+  <div class="hint">แยกตามแผนกจากคอลัมน์ department ในชีต people · กดหัวแผนกเพื่อพับ/กาง · กดชื่อเพื่อเลือก</div>
+</div>
+
+<div class="card">
+  <h2>วาระการประชุม <small>บรรทัดละ 1 วาระ</small></h2>
+  <textarea id="agenda" placeholder="ทบทวนงานค้างจากครั้งก่อน&#10;ผลตรวจ OOS batch 2609&#10;แผนสอบเทียบเครื่องมือไตรมาสหน้า"></textarea>
+</div>
+
+<div class="card">
+  <h2>สิ่งที่ต้องทำ <small>หนึ่งบรรทัด = หนึ่งงาน = หนึ่งคน</small></h2>
+  <table>
+    <thead><tr><th></th><th>ทำอะไร * (และต้องใช้อะไร)</th><th>ใคร *</th><th>เสร็จเมื่อไหร่ *</th><th>ความสำคัญ</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <button class="add" onclick="addRow()">+ เพิ่มงาน</button>
+  <div class="hint">แถวใหม่จะใช้กำหนดเสร็จเดิมของแถวก่อนหน้าให้อัตโนมัติ แก้ทีหลังได้ ·
+    ช่องที่สองใช้บอกว่างานนั้นต้องใช้อะไรหรือรออะไรอยู่ จะถูกใส่ลงในรูปสรุปด้วย</div>
+</div>
+
+<div class="card">
+  <h2>มติที่ประชุม <small>บรรทัดละ 1 ข้อ</small></h2>
+  <textarea id="decisions" placeholder="อนุมัติสั่งซื้อคอลัมน์ HPLC ล็อตใหม่"></textarea>
+</div>
+
+<div class="card">
+  <h2>ประเด็นค้าง และนัดครั้งหน้า</h2>
+  <div class="grid">
+    <div><label>ประเด็นค้าง / ความเสี่ยง (บรรทัดละ 1 ข้อ)</label><textarea id="open_issues"></textarea></div>
+    <div style="max-width:260px"><label>ประชุมครั้งถัดไป</label><input id="next_meeting_at" type="datetime-local"></div>
+  </div>
+</div>
+
+<div class="result" id="result">
+  <h3>ปิดประชุมเรียบร้อย</h3>
+  <div class="row" id="rEmail"></div>
+  <div class="row" id="rImage"></div>
+  <div class="row">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:4px">ข้อความสำหรับวางในกลุ่ม LINE</div>
+    <textarea id="rText" style="height:150px;font-family:monospace;font-size:12px"></textarea>
+    <button class="btn" style="margin-top:6px" onclick="copyLine()">คัดลอกข้อความ</button>
+    <span id="rCopied" style="color:#2b8a3e;font-size:12px"></span>
+  </div>
+  <div class="row" style="border-top:1px solid #b2f2bb;padding-top:12px">
+    <button class="btn primary" onclick="askNewMeeting()">เริ่มประชุมใหม่ (ล้างฟอร์ม)</button>
+    <span class="hint" style="margin-left:8px">ประชุมที่เพิ่งปิดจะยังอยู่ในชีต ไม่ถูกลบ</span>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="sp">
+    <span id="status">กำลังโหลด…</span>
+    <span id="mode" class="mode"></span>
+    <span id="build" class="build"></span>
+  </span>
+  <button class="btn" id="bSave" onclick="save(false)">บันทึกร่าง</button>
+  <button class="btn primary" id="bDone" onclick="finish()">ปิดประชุม &amp; ส่งสรุป</button>
+</div>
+
+<script>
+var PEOPLE = [], MEETING_ID = '', DIRTY = false;
+var MEETING_UPDATED_AT = '';  // เวลาที่บันทึกล่าสุดของประชุมที่เปิดอยู่ ใช้กันเขียนทับกัน
+var FORCE_SAVE = false;       // true เมื่อผู้ใช้ยืนยันว่าจะบันทึกทับทั้งที่ข้อมูลชนกัน
+
+function el(id) { return document.getElementById(id); }
+function show(kind, text) {
+  var m = el('msg');
+  m.className = 'msg ' + kind;
+  m.textContent = text;
+  m.style.display = text ? 'block' : 'none';
+  if (text) window.scrollTo(0, 0);
+}
+function setStatus(t) { el('status').textContent = t; }
+
+function escAttr(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+var NO_DEPT = 'ไม่ระบุแผนก';
+
+/** จัดรายชื่อเป็นกลุ่มตามแผนก — คืน { แผนก: [ชื่อ, ...] } */
+function groupPeople() {
+  var groups = {};
+  PEOPLE.forEach(function (p) {
+    var d = String(p.department || '').trim() || NO_DEPT;
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(p.name);
+  });
+  return groups;
+}
+
+function deptNames() {
+  var groups = groupPeople();
+  var keys = Object.keys(groups).sort();
+  // "ไม่ระบุแผนก" ไว้ท้ายสุดเสมอ
+  var i = keys.indexOf(NO_DEPT);
+  if (i > -1) { keys.splice(i, 1); keys.push(NO_DEPT); }
+  return keys;
+}
+
+/** dropdown เลือกคน — แยก optgroup ตามแผนกเช่นกัน จะได้หาชื่อเจอเมื่อทีมใหญ่ */
+function personOptions(selected) {
+  var groups = groupPeople();
+  var s = '<option value=""></option>';
+  deptNames().forEach(function (d) {
+    s += '<optgroup label="' + escAttr(d) + '">';
+    groups[d].forEach(function (n) {
+      s += '<option value="' + escAttr(n) + '"' + (n === selected ? ' selected' : '') +
+           '>' + escAttr(n) + '</option>';
+    });
+    s += '</optgroup>';
+  });
+  return s;
+}
+
+/**
+ * รายชื่อผู้เข้าร่วมแบบพับตามแผนก
+ * ทีมที่มีคนเยอะจะเลื่อนหาไม่ไหวถ้าเรียงชิปยาวเป็นพรืด จึงพับไว้และบอกจำนวนที่เลือกไว้ที่หัวกลุ่ม
+ */
+function renderPeople(selected) {
+  var groups = groupPeople();
+  var box = el('people');
+  box.innerHTML = '';
+  var collapse = PEOPLE.length > 12; // ทีมเล็กเปิดไว้เลย จะได้ไม่ต้องกดเพิ่ม
+
+  deptNames().forEach(function (dept) {
+    var picked = groups[dept].filter(function (n) { return selected.indexOf(n) > -1; }).length;
+
+    var wrap = document.createElement('details');
+    wrap.className = 'dept';
+    wrap.open = !collapse || picked > 0;
+
+    var sum = document.createElement('summary');
+    var head = document.createElement('span');
+    head.innerHTML = '<b>' + escAttr(dept) + '</b> <span class="muted">' +
+                     groups[dept].length + ' คน</span>';
+    var badge = document.createElement('span');
+    badge.className = 'pick';
+    sum.appendChild(head);
+    sum.appendChild(badge);
+    wrap.appendChild(sum);
+
+    var row = document.createElement('div');
+    row.className = 'people';
+    groups[dept].forEach(function (name) {
+      var d = document.createElement('div');
+      d.className = 'chip' + (selected.indexOf(name) > -1 ? ' on' : '');
+      d.textContent = name;
+      d.dataset.name = name;
+      d.onclick = function () {
+        d.classList.toggle('on');
+        DIRTY = true;
+        updatePickCounts();
+      };
+      row.appendChild(d);
+    });
+
+    var all = document.createElement('a');
+    all.className = 'alldept';
+    all.textContent = 'เลือกทั้งแผนก';
+    all.onclick = function () {
+      var chips = [].slice.call(row.querySelectorAll('.chip'));
+      var turnOn = chips.some(function (c) { return !c.classList.contains('on'); });
+      chips.forEach(function (c) { c.classList.toggle('on', turnOn); });
+      DIRTY = true;
+      updatePickCounts();
+    };
+    row.appendChild(all);
+
+    wrap.appendChild(row);
+    box.appendChild(wrap);
+  });
+
+  updatePickCounts();
+}
+
+/** อัปเดตตัวเลข "เลือกแล้ว n" ที่หัวกลุ่ม เพื่อให้กลุ่มที่พับอยู่ก็ยังรู้ว่าเลือกใครไว้ */
+function updatePickCounts() {
+  [].slice.call(document.querySelectorAll('#people .dept')).forEach(function (wrap) {
+    var n = wrap.querySelectorAll('.chip.on').length;
+    var badge = wrap.querySelector('.pick');
+    badge.textContent = n ? 'เลือกแล้ว ' + n : '';
+    badge.className = 'pick' + (n ? ' has' : '');
+  });
+  var total = document.querySelectorAll('#people .chip.on').length;
+  el('peopleTotal').textContent = total ? 'เลือกไว้ ' + total + ' คน' : 'ยังไม่ได้เลือกใคร';
+}
+
+function addRow(item) {
+  item = item || {};
+  var tb = el('rows');
+  // แถวใหม่หยิบกำหนดเสร็จของแถวสุดท้ายมาใช้ จะได้ไม่ต้องเลือกวันซ้ำ ๆ ระหว่างประชุม
+  var due = item.due_date || lastDue();
+  var tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td class="n">' + (tb.children.length + 1) + '</td>' +
+    '<td><input class="task" placeholder="ทำอะไร" value="' + escAttr(item.task) + '">' +
+      '<input class="note" placeholder="ต้องใช้อะไร / รออะไรอยู่ (ไม่บังคับ)" value="' +
+      escAttr(item.note) + '"></td>' +
+    '<td style="width:150px"><select class="owner">' + personOptions(item.owner) + '</select></td>' +
+    '<td style="width:150px"><input class="due" type="date" value="' + escAttr(due) + '"></td>' +
+    '<td style="width:110px"><select class="pri">' +
+      ['High', 'Medium', 'Low'].map(function (p) {
+        return '<option' + (p === (item.priority || 'Medium') ? ' selected' : '') + '>' + p + '</option>';
+      }).join('') + '</select></td>' +
+    '<td class="x"><button class="del" title="ลบแถวนี้" onclick="delRow(this)">×</button></td>';
+  tb.appendChild(tr);
+  tr.querySelector('.task').addEventListener('input', function () { DIRTY = true; });
+  tr.querySelector('.note').addEventListener('input', function () { DIRTY = true; });
+  return tr;
+}
+
+function lastDue() {
+  var d = el('rows').querySelectorAll('.due');
+  if (d.length) return d[d.length - 1].value;
+  return el('date').value || '';
+}
+
+function delRow(btn) {
+  btn.closest('tr').remove();
+  renumber();
+  DIRTY = true;
+}
+
+function renumber() {
+  var rows = el('rows').children;
+  for (var i = 0; i < rows.length; i++) rows[i].querySelector('.n').textContent = i + 1;
+}
+
+function collect() {
+  var attendees = [];
+  var chips = document.querySelectorAll('#people .chip.on');
+  for (var i = 0; i < chips.length; i++) attendees.push(chips[i].dataset.name);
+
+  var items = [];
+  var rows = el('rows').children;
+  for (var j = 0; j < rows.length; j++) {
+    var r = rows[j];
+    var task = r.querySelector('.task').value.trim();
+    var owner = r.querySelector('.owner').value;
+    var due = r.querySelector('.due').value;
+    // ข้ามแถวที่ยังไม่ได้กรอกอะไรเลย — วันที่ไม่นับ เพราะระบบเติมให้อัตโนมัติทุกแถวใหม่
+    if (!task && !owner) continue;
+    items.push({
+      task: task, owner: owner, due_date: due,
+      priority: r.querySelector('.pri').value,
+      note: r.querySelector('.note').value.trim()
+    });
+  }
+
+  return {
+    meeting_id: MEETING_ID,
+    updated_at: MEETING_UPDATED_AT,
+    force: FORCE_SAVE,
+    title: el('title').value.trim(),
+    date: el('date').value,
+    start_time: el('start_time').value,
+    end_time: el('end_time').value,
+    location: el('location').value.trim(),
+    chair: el('chair').value,
+    note_taker: el('note_taker').value,
+    attendees: attendees,
+    agenda: el('agenda').value,
+    decisions: el('decisions').value,
+    open_issues: el('open_issues').value,
+    next_meeting_at: el('next_meeting_at').value,
+    items: items
+  };
+}
+
+function busy(on) {
+  el('bSave').disabled = on;
+  el('bDone').disabled = on;
+}
+
+/**
+ * จัดการ error จากฝั่งเซิร์ฟเวอร์
+ * ถ้าเป็นการชนกันของข้อมูล (มีคนบันทึกคั่นระหว่างที่เราเปิดฟอร์มค้างไว้)
+ * ต้องให้คนตัดสินใจเอง ไม่ใช่ทับเงียบ ๆ หรือทิ้งสิ่งที่เพิ่งพิมพ์ไป
+ */
+function handleFailure(e, retryFn) {
+  busy(false);
+  var msg = String((e && e.message) || e);
+  // ต้องหาแบบ "มีคำนี้อยู่ในข้อความ" ไม่ใช่ "ขึ้นต้นด้วย"
+  // เพราะ Apps Script เติม "Error: " นำหน้าข้อความที่โยนมาจากฝั่งเซิร์ฟเวอร์
+  if (msg.indexOf('CONFLICT') > -1) {
+    setStatus('ข้อมูลชนกัน รอการตัดสินใจ');
+    showConfirm(
+      '⚠ <b>ข้อมูลชนกัน</b><br>' + escAttr(cleanMessage(msg)) +
+      '<br><br><b>กดยืนยัน</b> = บันทึกทับด้วยข้อมูลในหน้านี้ (ข้อมูลที่อีกฝั่งเพิ่งใส่จะหาย)' +
+      '<br><b>กดยกเลิก</b> = ไม่บันทึก · อย่าเพิ่งรีเฟรชถ้ายังไม่ได้บันทึก เพราะสิ่งที่พิมพ์ค้างไว้จะหาย',
+      function () { FORCE_SAVE = true; retryFn(); });
+    return;
+  }
+  setStatus('ไม่สำเร็จ');
+  show('err', 'เกิดข้อผิดพลาด: ' + cleanMessage(msg));
+}
+
+/** ตัดคำนำหน้าที่ระบบเติมมา ให้เหลือแต่ข้อความที่คนอ่านรู้เรื่อง */
+function cleanMessage(msg) {
+  return String(msg)
+    .replace('Error:', '')
+    .replace('Exception:', '')
+    .replace('CONFLICT:', '')
+    .trim();
+}
+
+/** จำเวลาที่บันทึกล่าสุดของประชุมนี้ไว้ เพื่อให้เซิร์ฟเวอร์ตรวจได้ว่าข้อมูลในมือยังใหม่ไหม */
+function afterSave(res) {
+  if (res && res.updated_at !== undefined) MEETING_UPDATED_AT = res.updated_at;
+  FORCE_SAVE = false;
+}
+
+/**
+ * บันทึกร่างระหว่างประชุม โดยไม่ส่งอะไรออกไปข้างนอก
+ * (ฟังก์ชันนี้เคยหายไปตอนรีแฟกเตอร์แผงยืนยัน ทำให้ปุ่มบันทึกร่างตายอยู่หลายเวอร์ชัน
+ *  ตอนนี้ tools/verify.js ตรวจแล้วว่าทุกปุ่มมีฟังก์ชันรองรับจริง)
+ */
+function save(check) {
+  busy(true);
+  setStatus('กำลังบันทึก…');
+  google.script.run
+    .withSuccessHandler(function (res) {
+      busy(false);
+      afterSave(res);
+      MEETING_ID = res.meeting_id;
+      el('mid').textContent = res.meeting_id;
+      DIRTY = false;
+      setStatus('บันทึกล่าสุด ' + res.saved_at);
+      if (check && res.errors.length) {
+        show('err', 'ยังมีจุดที่ต้องแก้\n\n• ' + res.errors.join('\n• '));
+      } else {
+        show('ok', 'บันทึกแล้ว ' + res.item_count + ' งาน');
+      }
+    })
+    .withFailureHandler(function (e) { handleFailure(e, function () { save(check); }); })
+    .formSave(collect(), check);
+}
+
+/* ---- แผงยืนยัน ----
+   ใช้ร่วมกัน 3 งาน: ส่งสรุป / สลับโหมดส่ง / เริ่มประชุมใหม่
+   เก็บสิ่งที่จะทำไว้ในตัวแปรแทนการเปลี่ยน onclick ของปุ่ม เพราะการเปลี่ยน onclick
+   ทำให้เคยเกิดบั๊กปุ่มค้างงานเก่าเมื่อผู้ใช้กดยกเลิกจากงานหนึ่งแล้วไปเปิดอีกงาน
+
+   ห้ามใช้ window.confirm(): หน้าเว็บของ Apps Script อยู่ใน iframe แบบ sandbox
+   ที่ไม่มี allow-modals เบราว์เซอร์จะข้าม dialog แล้วคืนค่า false ทันที */
+var CONFIRM_ACTION = null;
+
+function showConfirm(html, action) {
+  CONFIRM_ACTION = action;
+  el('confirmText').innerHTML = html;
+  el('confirm').style.display = 'block';
+  el('confirm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function hideConfirm() {
+  el('confirm').style.display = 'none';
+  CONFIRM_ACTION = null;
+}
+
+function confirmYes() {
+  var action = CONFIRM_ACTION;
+  hideConfirm();
+  if (action) action();
+}
+
+function confirmNo() {
+  hideConfirm();
+  setStatus('ยกเลิกแล้ว');
+}
+
+/* ---- ปิดประชุม: บันทึก -> ตรวจ -> ยืนยันรายชื่อผู้รับ -> ส่งอีเมล + สร้างรูป ---- */
+
+function finish() {
+  busy(true);
+  hideConfirm();
+  setStatus('กำลังตรวจข้อมูล…');
+  google.script.run
+    .withSuccessHandler(function (pv) {
+      busy(false);
+      afterSave(pv);
+      if (pv.errors.length) {
+        setStatus('ยังส่งไม่ได้');
+        show('err', 'ยังปิดประชุมไม่ได้ ต้องแก้ก่อน\n\n• ' + pv.errors.join('\n• '));
+        return;
+      }
+      show('', '');
+      var h = [];
+      h.push(pv.dry_run
+        ? '🧪 <b>โหมดทดสอบ</b> จะยังไม่มีอีเมลออกจริง'
+        : '📧 <b>โหมดส่งจริง</b> อีเมลจะถูกส่งทันทีที่กดยืนยัน');
+      h.push('งานทั้งหมด <b>' + pv.item_count + '</b> รายการ');
+      h.push('ผู้รับ <b>' + pv.to.length + '</b> คน: ' +
+        (pv.to.map(escAttr).join(', ') || '(ไม่มี)'));
+      if (pv.cc.length) h.push('สำเนา: ' + pv.cc.map(escAttr).join(', '));
+      if (pv.already_sent) {
+        h.push('ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + escAttr(pv.sent_at) +
+               ' จะไม่ส่งซ้ำ แต่จะสร้างรูปใหม่ให้');
+      }
+      if (pv.warnings.length) {
+        h.push('<b>ข้อควรระวัง</b>');
+        h.push('• ' + pv.warnings.map(escAttr).join('<br>• '));
+      }
+      showConfirm(h.join('<br>'), doSend);
+      setStatus('รอการยืนยัน');
+    })
+    .withFailureHandler(function (e) { handleFailure(e, finish); })
+    .webPreview(collect());
+}
+
+function doSend() {
+  busy(true);
+  setStatus('กำลังส่งและสร้างรูป… อาจใช้เวลาสัก 10–20 วินาที');
+  google.script.run
+    .withSuccessHandler(showResult)
+    .withFailureHandler(function (e) { handleFailure(e, doSend); })
+    .webFinish(collect());
+}
+
+function showResult(r) {
+  busy(false);
+  DIRTY = false;
+  afterSave(r);
+  if (!r.ok) {
+    setStatus('ยังส่งไม่ได้');
+    show('err', 'ยังปิดประชุมไม่ได้\n\n• ' + r.errors.join('\n• '));
+    return;
+  }
+  MEETING_ID = r.meeting_id;
+  el('mid').textContent = r.meeting_id;
+  show('', '');
+  setStatus('ปิดประชุมแล้ว ' + r.meeting_id);
+
+  // ทุกค่าที่มาจากชีตต้อง escape ก่อนต่อเข้า HTML เพราะเป็นข้อความที่คนกรอกเองได้
+  var email;
+  if (r.already_sent) {
+    email = '📧 ประชุมนี้ส่งอีเมลไปแล้วเมื่อ ' + escAttr(r.sent_at) + ' ระบบไม่ส่งซ้ำ';
+  } else if (r.email_error) {
+    email = '⚠ ส่งอีเมลไม่สำเร็จ: ' + escAttr(r.email_error) +
+            ' (รูปและข้อความด้านล่างยังใช้ได้ตามปกติ)';
+  } else if (r.email_skipped === 'no_recipients') {
+    email = '⚠ <b>ข้ามการส่งอีเมล</b> เพราะยังไม่มีผู้รับ — ไปกรอกคอลัมน์ email ในชีต people ก่อน';
+  } else if (r.dry_run) {
+    email = '🧪 <b>โหมดทดสอบ</b> ไม่มีอีเมลออกจริง (ผู้รับที่จะได้รับ ' + Number(r.recipients) + ' คน)';
+  } else {
+    email = '📧 ส่งอีเมลแล้ว ' + Number(r.recipients) + ' คน' +
+      (r.personal ? ' และเมลรายบุคคลอีก ' + Number(r.personal) + ' ฉบับ' : '') +
+      ' · โควตาคงเหลือวันนี้ ' + Number(r.quota_left);
+  }
+  el('rEmail').innerHTML = email;
+
+  if (r.image_data || r.image_url) {
+    var img = r.image_data
+      ? '<img class="shot" src="' + escAttr(r.image_data) + '" alt="' +
+        escAttr(r.image_name || 'สรุปประชุม') + '">'
+      : '';
+    el('rImage').innerHTML = img +
+      '<div class="hint" style="margin-top:6px">มือถือ: กดค้างที่รูป → บันทึกรูปภาพ · คอม: คลิกขวา → Save image as' +
+      (r.image_url ? ' · <a href="' + escAttr(r.image_url) +
+        '" target="_blank" rel="noopener">เปิดใน Drive</a>' : '') +
+      ' · ' + escAttr(r.image_name || '') + '</div>';
+  } else {
+    el('rImage').innerHTML = '⚠ สร้างรูปไม่สำเร็จ: ' + escAttr(r.image_error || 'ไม่ทราบสาเหตุ') +
+      ' — ใช้ข้อความข้างล่างแทนได้';
+  }
+
+  el('rText').value = r.line_text || '';
+  el('rCopied').textContent = '';
+  el('result').style.display = 'block';
+  el('result').scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyLine() {
+  var t = el('rText');
+  t.select();
+  document.execCommand('copy');
+  el('rCopied').textContent = ' คัดลอกแล้ว';
+}
+
+/* ---- เริ่มประชุมใหม่ ----
+   จำเป็นเพราะในโหมดทดสอบสถานะยังเป็น draft พอเปิดฟอร์มใหม่ระบบจะดึงร่างเดิมกลับมาเสมอ
+   ถ้าไม่มีปุ่มนี้ก็จะติดอยู่กับประชุมเดิมตลอด */
+
+function askNewMeeting() {
+  var h = ['เริ่มประชุมใหม่และล้างฟอร์ม'];
+  if (MEETING_ID) {
+    h.push('ประชุม <b>' + MEETING_ID + '</b> ที่ทำอยู่ถูกบันทึกไว้ในชีตแล้ว จะไม่ถูกลบ');
+  }
+  h.push('ยืนยันหรือไม่');
+  showConfirm(h.join('<br>'), doNewMeeting);
+}
+
+function doNewMeeting() {
+  busy(true);
+  setStatus('กำลังเปิดประชุมใหม่…');
+  google.script.run
+    .withSuccessHandler(function (data) {
+      busy(false);
+      init(data);
+      show('', '');
+      window.scrollTo(0, 0);
+    })
+    .withFailureHandler(function (e) {
+      busy(false);
+      setStatus('เปิดประชุมใหม่ไม่สำเร็จ');
+      show('err', 'เกิดข้อผิดพลาด: ' + e.message);
+    })
+    .webStartNew();
+}
+
+/* ---- เพิ่มคนใหม่ระหว่างประชุม ----
+   มีคนมาร่วมประชุมที่ยังไม่อยู่ในทะเบียน ต้องเพิ่มได้จากหน้านี้เลย
+   ไม่ต้องออกไปเปิดชีต เพราะระหว่างประชุมไม่มีใครอยากสลับหน้าจอ */
+
+function toggleAddPerson(show) {
+  el('addPerson').hidden = !show;
+  el('addPersonToggle').hidden = show;
+  if (show) {
+    fillDeptSuggestions();
+    el('newName').focus();
+  }
+}
+
+/** เติมรายชื่อแผนกที่มีอยู่แล้วเป็นตัวเลือก จะได้ไม่พิมพ์แผนกเพี้ยนกันคนละแบบ */
+function fillDeptSuggestions() {
+  el('deptList').innerHTML = deptNames()
+    .filter(function (d) { return d !== NO_DEPT; })
+    .map(function (d) { return '<option value="' + escAttr(d) + '">'; })
+    .join('');
+}
+
+function submitNewPerson() {
+  var name = el('newName').value.trim();
+  if (!name) {
+    el('addPersonMsg').textContent = 'ยังไม่ได้พิมพ์ชื่อ';
+    el('newName').focus();
+    return;
+  }
+  var payload = {
+    name: name,
+    department: el('newDept').value.trim(),
+    email: el('newEmail').value.trim()
+  };
+  el('addPersonMsg').textContent = 'กำลังเพิ่ม…';
+  el('btnAddPerson').disabled = true;
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      el('btnAddPerson').disabled = false;
+      PEOPLE = res.people;
+
+      // เก็บคนที่เลือกไว้เดิม แล้วเพิ่มคนใหม่เข้าไปด้วย
+      var selected = collect().attendees;
+      if (selected.indexOf(res.name) === -1) selected.push(res.name);
+      renderPeople(selected);
+      refreshPersonSelects();
+
+      el('newName').value = '';
+      el('newEmail').value = '';
+      el('addPersonMsg').textContent =
+        (res.status === 'added' ? 'เพิ่ม ' : 'มีอยู่แล้ว เลือกให้ ') + res.name +
+        (res.has_email ? '' : ' (ยังไม่มีอีเมล จะไม่ได้รับสรุปทางเมล)');
+      DIRTY = true;
+      el('newName').focus();
+    })
+    .withFailureHandler(function (e) {
+      el('btnAddPerson').disabled = false;
+      el('addPersonMsg').textContent = e.message;
+    })
+    .webAddPerson(payload);
+}
+
+/**
+ * สร้าง dropdown เลือกคนใหม่ทุกช่อง หลังทะเบียนรายชื่อเปลี่ยน
+ * ต้องเก็บค่าที่เลือกไว้ก่อนแล้วใส่กลับ ไม่งั้นงานที่ระบุผู้รับผิดชอบไว้แล้วจะโดนล้าง
+ */
+function refreshPersonSelects() {
+  ['chair', 'note_taker'].forEach(function (id) {
+    var cur = el(id).value;
+    el(id).innerHTML = personOptions(cur);
+    el(id).value = cur;
+  });
+  [].slice.call(el('rows').querySelectorAll('.owner')).forEach(function (sel) {
+    var cur = sel.value;
+    sel.innerHTML = personOptions(cur);
+    sel.value = cur;
+  });
+}
+
+/* ---- โหมดส่ง: แสดงและสลับจากหน้าเว็บ ----
+   ผู้ใช้ที่ใช้เฉพาะลิงก์ Web App จะไม่เห็นเมนูในชีต ถ้าไม่มีปุ่มนี้จะปิด DRY_RUN ไม่ได้เลย */
+var CTX = null;
+
+function renderMode(ctx) {
+  CTX = ctx;
+  // แสดงเวอร์ชันที่กำลังรันอยู่ เพื่อตอบคำถาม "refresh แล้วหรือยัง" ได้ทันทีเวลาดีบัก
+  el('build').textContent = ctx.build ? 'เวอร์ชัน ' + ctx.build : '';
+
+  // ระบบใช้ "ชื่อ" เป็นตัวระบุตัวตน ถ้ามีชื่อซ้ำกันสองคน งานอาจถูกส่งไปหาผิดคน
+  var dups = ctx.duplicate_names || [];
+  el('dupWarn').textContent = dups.length
+    ? '⚠ ชีต people มีชื่อซ้ำกัน: ' + dups.join(', ') +
+      ' — ระบบแยกไม่ออกว่าเป็นใคร ควรแก้ให้ต่างกัน เช่นเติมแผนกต่อท้ายชื่อ'
+    : '';
+  var m = el('mode');
+  if (ctx.dry_run) {
+    m.className = 'mode test';
+    m.innerHTML = '🧪 โหมดทดสอบ ไม่ส่งอีเมลจริง <a onclick="askMode(false)">เปลี่ยนเป็นส่งจริง</a>';
+  } else {
+    m.className = 'mode live';
+    m.innerHTML = '📧 โหมดส่งจริง <a onclick="askMode(true)">กลับไปโหมดทดสอบ</a>';
+  }
+  if (ctx.people_with_email === 0 && ctx.people_total > 0) {
+    m.innerHTML += ' · <span title="ไปกรอกคอลัมน์ email ในชีต people">⚠ ยังไม่มีอีเมลในทะเบียนรายชื่อ</span>';
+  }
+}
+
+function askMode(toTest) {
+  var h = [];
+  if (toTest) {
+    h.push('เปลี่ยนกลับเป็น <b>โหมดทดสอบ</b> — กดปิดประชุมแล้วจะไม่มีอีเมลออกจริง');
+  } else {
+    h.push('เปลี่ยนเป็น <b>โหมดส่งจริง</b> — ครั้งต่อไปที่กดปิดประชุมและกดยืนยัน อีเมลจะถูกส่งออกจริงทันที');
+    if (CTX && CTX.people_with_email === 0) {
+      h.push('⚠ ตอนนี้ยังไม่มีใครในชีต people ที่มีอีเมล ระบบจะข้ามการส่งเมลอยู่ดี');
+    }
+  }
+  h.push('ยืนยันหรือไม่');
+  showConfirm(h.join('<br>'), function () { doSetMode(toTest); });
+}
+
+function doSetMode(toTest) {
+  setStatus('กำลังเปลี่ยนโหมด…');
+  google.script.run
+    .withSuccessHandler(function (ctx) {
+      renderMode(ctx);
+      setStatus(ctx.dry_run ? 'อยู่ในโหมดทดสอบ' : 'อยู่ในโหมดส่งจริง');
+    })
+    .withFailureHandler(function (e) {
+      setStatus('เปลี่ยนโหมดไม่สำเร็จ');
+      show('err', 'เกิดข้อผิดพลาด: ' + e.message);
+    })
+    .webSetDryRun(toTest);
+}
+
+function init(data) {
+  // เรียกซ้ำได้ (ปุ่มเริ่มประชุมใหม่ใช้ฟังก์ชันนี้) จึงต้องล้างของเดิมก่อนเสมอ
+  el('rows').innerHTML = '';
+  el('result').style.display = 'none';
+  hideConfirm();
+  toggleAddPerson(false);
+  el('addPersonMsg').textContent = '';
+  ['title', 'start_time', 'end_time', 'location', 'agenda', 'decisions', 'open_issues', 'next_meeting_at']
+    .forEach(function (k) { el(k).value = ''; });
+
+  PEOPLE = data.people;
+  MEETING_ID = data.meeting.meeting_id || '';
+  MEETING_UPDATED_AT = data.meeting.updated_at || '';
+  FORCE_SAVE = false;
+  el('mid').textContent = MEETING_ID;
+
+  el('chair').innerHTML = personOptions(data.meeting.chair);
+  el('note_taker').innerHTML = personOptions(data.meeting.note_taker);
+
+  ['title', 'date', 'start_time', 'end_time', 'location', 'agenda', 'decisions', 'open_issues', 'next_meeting_at']
+    .forEach(function (k) { if (data.meeting[k]) el(k).value = data.meeting[k]; });
+
+  renderPeople(data.meeting.attendees || []);
+
+  if (data.items.length) data.items.forEach(addRow);
+  else { addRow(); addRow(); addRow(); }
+
+  setStatus(data.meeting.sent ? 'ประชุมนี้ส่งสรุปไปแล้ว' : 'พร้อมจด');
+  if (!PEOPLE.length) show('err', 'ยังไม่มีรายชื่อในชีต people — ไปกรอกชื่อและอีเมลทีมก่อน แล้วเปิดฟอร์มนี้ใหม่');
+}
+
+google.script.run.withSuccessHandler(init)
+  .withFailureHandler(function (e) { show('err', 'โหลดข้อมูลไม่สำเร็จ: ' + e.message); })
+  .formInit();
+
+google.script.run.withSuccessHandler(renderMode)
+  .withFailureHandler(function () { el('mode').textContent = ''; })
+  .webContext();
+
+window.addEventListener('beforeunload', function (e) {
+  if (DIRTY) { e.preventDefault(); e.returnValue = ''; }
+});
+</script>
+</body>
+</html>

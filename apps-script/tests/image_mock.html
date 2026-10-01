@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>แบบจำลองเลย์เอาต์รูปสรุป</title>
+<!--
+  แบบจำลองของรูปที่ Image.gs วาดลงสไลด์ ใช้ตอนออกแบบเท่านั้น ไม่ได้เป็นส่วนของระบบ
+  มี 2 โหมดเหมือนโค้ดจริง:
+    wide (16:9)  = สิ่งที่ Slides ให้มาจริงตอนนี้ เพราะ API เมิน pageSize ที่สั่งไป
+    tall         = กรณีที่ขอผืนผ้าใบสูงได้สำเร็จ
+  1pt ในสไลด์ = 2px ที่นี่
+-->
+<style>
+  body { margin:0; padding:24px; background:#e9ecef; font-family:'Sarabun','Segoe UI',sans-serif; }
+  h1 { font-size:15px; color:#495057; width:1440px; margin:0 auto 8px; }
+  .card { background:#fff; box-shadow:0 4px 24px rgba(0,0,0,.15); margin:0 auto 40px; }
+  .wide { width:1440px; height:810px; }   /* 720x405pt */
+  .tall { width:960px; }                  /* 480pt กว้าง */
+
+  .bar { height:18px; background:#1971c2; }
+  .head { padding:22px 52px 0; }
+  .title { font-size:42px; font-weight:700; color:#14213d; line-height:1.25; }
+  .sub { margin-top:6px; font-size:23px; color:#495057; }
+
+  .roles { display:flex; margin-top:18px; border-top:2px solid #e9ecef; border-bottom:2px solid #e9ecef; }
+  .role { flex:1; padding:10px 52px; border-right:2px solid #e9ecef; }
+  .role:last-child { border-right:0; }
+  .role .k { font-size:18px; color:#868e96; }
+  .role .v { font-size:24px; font-weight:700; color:#212529; }
+
+  .cols { display:flex; padding:8px 52px 0; gap:44px; }
+  .left { width:42%; border-right:2px solid #e9ecef; padding-right:22px; }
+  .right { flex:1; }
+
+  .sec h2 { margin:24px 0 12px; font-size:23px; color:#1971c2; border-bottom:3px solid #d0e6fb;
+            padding-bottom:8px; }
+  .sec p { margin:0 0 6px; font-size:23px; line-height:1.5; color:#212529; }
+
+  table { width:100%; border-collapse:collapse; }
+  th { background:#1971c2; color:#fff; font-size:19px; padding:9px 10px; text-align:left; }
+  td { padding:11px 10px; font-size:24px; vertical-align:top; border-bottom:2px solid #e9ecef; }
+  tr:nth-child(even) td { background:#f4f9ff; }
+  .n { width:44px; color:#868e96; font-size:19px; }
+  .who { width:22%; font-weight:700; }
+  .due { width:22%; font-weight:700; color:#c92a2a; }
+  .task { font-weight:700; }
+  .need { display:block; margin-top:4px; font-size:19px; font-weight:400; color:#495057; }
+
+  .foot { position:relative; margin-top:auto; background:#f1f3f5; padding:12px 52px; font-size:19px;
+          color:#495057; display:flex; justify-content:space-between; }
+  .wrap { display:flex; flex-direction:column; height:100%; }
+</style>
+</head>
+<body>
+
+<h1>โหมด wide (16:9) — สิ่งที่ Slides ให้มาจริงตอนนี้</h1>
+<div class="card wide">
+  <div class="wrap">
+    <div class="bar"></div>
+    <div class="head">
+      <div class="title">ทบทวนคุณภาพประจำสัปดาห์</div>
+      <div class="sub">วันที่ 10 ก.ย. 2026 &nbsp;·&nbsp; เวลา 10:00–11:30 &nbsp;·&nbsp; สถานที่ ห้องประชุม 12502</div>
+    </div>
+    <div class="roles">
+      <div class="role"><div class="k">ประธาน</div><div class="v">กษมา พงษ์สามารถ</div></div>
+      <div class="role"><div class="k">ผู้จดบันทึก</div><div class="v">นิภาพร บุษยากุล</div></div>
+      <div class="role"><div class="k">ผู้เข้าร่วม</div><div class="v">6 คน</div></div>
+    </div>
+
+    <div class="cols">
+      <div class="left">
+        <div class="sec">
+          <h2>ผู้เข้าร่วมประชุม (6 คน)</h2>
+          <p>กษมา พงษ์สามารถ · นิภาพร บุษยากุล · ปณชัย วิชัยสุนทร · สมชาย · สุดา · ประเสริฐ</p>
+        </div>
+        <div class="sec">
+          <h2>วาระการประชุม</h2>
+          <p>1. ทบทวนงานค้างจากครั้งก่อน</p>
+          <p>2. ผลตรวจ OOS batch 2609</p>
+        </div>
+        <div class="sec">
+          <h2>มติที่ประชุม</h2>
+          <p>• อนุมัติสั่งซื้อคอลัมน์ HPLC ล็อตใหม่</p>
+        </div>
+        <div class="sec">
+          <h2>ประเด็นค้าง / ความเสี่ยง</h2>
+          <p>• ยังไม่มีข้อสรุปเรื่องงบซ่อมเครื่อง</p>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="sec">
+          <h2>สิ่งที่ต้องทำ (4 รายการ)</h2>
+          <table>
+            <tr><th class="n">#</th><th>ทำอะไร</th><th class="who">ใคร</th><th class="due">ครบกำหนด</th></tr>
+            <tr>
+              <td class="n">1</td>
+              <td class="task">ทบทวน SOP การสอบเทียบเครื่องชั่งประจำปี
+                <span class="need">ต้องใช้: ผลสอบเทียบล่าสุดจากผู้ให้บริการ</span></td>
+              <td class="who">สมชาย</td><td class="due">12 ก.ย. 2026</td>
+            </tr>
+            <tr>
+              <td class="n">2</td>
+              <td class="task">ส่งใบเสนอราคาเครื่อง HPLC ให้ฝ่ายจัดซื้อ</td>
+              <td class="who">สุดา</td><td class="due">15 ก.ย. 2026</td>
+            </tr>
+            <tr>
+              <td class="n">3</td>
+              <td class="task">สรุปผล OOS ของ batch 2609 พร้อมแนบ chromatogram
+                <span class="need">ต้องใช้: รอผลจากห้องแล็บกลาง</span></td>
+              <td class="who">ประเสริฐ</td><td class="due">18 ก.ย. 2026</td>
+            </tr>
+            <tr>
+              <td class="n">4</td>
+              <td class="task">สั่งซื้อสารมาตรฐานชุดใหม่</td>
+              <td class="who">ปณชัย</td><td class="due">20 ก.ย. 2026</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span>ประชุมครั้งถัดไป &nbsp;17 ก.ย. 2026 10:00</span>
+      <span>MOM-2026-001</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
