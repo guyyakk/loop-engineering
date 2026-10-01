@@ -21,6 +21,8 @@ export interface PlannerSettings {
   /** เคยเชื่อม Google Calendar แล้ว ให้ใช้นาทีจากปฏิทินและชวนซิงก์ต่อ */
   calendarEnabled: boolean
   calendarSyncedAt: string | null
+  /** โหมดละเอียด (เวลาว่าง, บอร์ด, พิธีปิดวัน, AI, ปฏิทิน); ปิดอยู่ = โหมดง่ายแบบรายการงาน */
+  detailed: boolean
 }
 
 export type Particle = '' | 'ครับ' | 'ค่ะ'
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: PlannerSettings = {
   googleClientId: null,
   calendarEnabled: false,
   calendarSyncedAt: null,
+  detailed: false,
 }
 
 /** สัดส่วนที่ถือว่าใกล้เต็ม */
@@ -165,7 +168,7 @@ export interface DayColumn {
 
 export interface WeekPlan {
   days: DayColumn[]
-  /** ลูปที่ยังไม่ได้ลงวัน */
+  /** ลูปที่ยังไม่ได้ลงวัน (งาน "เดือนนี้" อยู่ในกองไว้ก่อน เพราะไม่ใช่งานของสัปดาห์นี้) */
   tray: { week: Loop[]; later: Loop[] }
   /** รวมเฉพาะวันนี้เป็นต้นไป เพราะวันที่ผ่านไปแล้ววางงานเพิ่มไม่ได้ */
   plannedMinutes: number
@@ -194,7 +197,7 @@ export function buildWeek(
   const upcoming = days.filter((d) => !d.isPast)
   return {
     days,
-    tray: { week: unscheduled.filter((l) => l.horizon === 'week'), later: unscheduled.filter((l) => l.horizon === 'later') },
+    tray: { week: unscheduled.filter((l) => l.horizon === 'week'), later: unscheduled.filter((l) => l.horizon !== 'week') },
     plannedMinutes: upcoming.reduce((sum, d) => sum + d.load.plannedMinutes, 0),
     freeMinutes: upcoming.reduce((sum, d) => sum + d.load.freeMinutes, 0),
   }

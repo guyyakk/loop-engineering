@@ -4,7 +4,7 @@ import { addDays, startOfWeek, toDateKey, weekdayOf, type DateKey } from './date
 // ต้องจบด้วยสถานะ done หรือ dropped อย่างตั้งใจเท่านั้น
 
 export type LoopStatus = 'active' | 'waiting' | 'blocked' | 'done' | 'dropped'
-export type Horizon = 'today' | 'week' | 'later'
+export type Horizon = 'today' | 'week' | 'month' | 'later'
 export type Energy = 'deep' | 'shallow'
 
 export interface Step {
@@ -65,6 +65,7 @@ export const STATUS_LABEL: Record<LoopStatus, string> = {
 export const HORIZON_LABEL: Record<Horizon, string> = {
   today: 'วันนี้',
   week: 'สัปดาห์นี้',
+  month: 'เดือนนี้',
   later: 'ไว้ก่อน',
 }
 
@@ -261,7 +262,11 @@ export function scheduleOn(loop: Loop, date: DateKey, now: Date): Loop {
 }
 
 /** ตัวเลือก "ทำเมื่อไหร่": วันที่ (YYYY-MM-DD) หรือกองงาน */
-export type PlanValue = DateKey | 'week' | 'later'
+export type PlanValue = DateKey | 'week' | 'month' | 'later'
+
+export function isTray(value: PlanValue): value is 'week' | 'month' | 'later' {
+  return value === 'week' || value === 'month' || value === 'later'
+}
 
 export function planValueOf(loop: Loop, today: DateKey): PlanValue {
   if (loop.horizon === 'today') return today
@@ -269,7 +274,7 @@ export function planValueOf(loop: Loop, today: DateKey): PlanValue {
 }
 
 export function applyPlan(loop: Loop, value: PlanValue, now: Date): Loop {
-  return value === 'week' || value === 'later' ? setHorizon(loop, value, now) : scheduleOn(loop, value, now)
+  return isTray(value) ? setHorizon(loop, value, now) : scheduleOn(loop, value, now)
 }
 
 /**
@@ -333,7 +338,7 @@ function revive(loop: Loop, status: LoopStatus, now: Date): Loop {
 
 export type Section = Horizon | 'closed'
 
-export const SECTIONS: Section[] = ['today', 'week', 'later', 'closed']
+export const SECTIONS: Section[] = ['today', 'week', 'month', 'later', 'closed']
 
 const statusRank: Record<LoopStatus, number> = { active: 0, blocked: 1, waiting: 2, done: 3, dropped: 3 }
 
@@ -355,10 +360,11 @@ export function sectionOf(loop: Loop, today: DateKey | null): Section {
 
 /** จัดกลุ่มตามช่วงเวลา ลูปที่ยังทำได้อยู่บน, ลูปที่รอคนอื่นอยู่ล่าง, ปิดแล้วเรียงล่าสุดก่อน */
 export function groupLoops(loops: Loop[], today: DateKey | null = null): Record<Section, Loop[]> {
-  const groups: Record<Section, Loop[]> = { today: [], week: [], later: [], closed: [] }
+  const groups: Record<Section, Loop[]> = { today: [], week: [], month: [], later: [], closed: [] }
   for (const loop of loops) groups[sectionOf(loop, today)].push(loop)
   groups.today.sort(compareOpen)
   groups.week.sort(compareOpen)
+  groups.month.sort(compareOpen)
   groups.later.sort(compareOpen)
   groups.closed.sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''))
   return groups

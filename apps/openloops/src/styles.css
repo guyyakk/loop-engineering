@@ -2013,3 +2013,230 @@ dialog.sheet::backdrop {
   min-height: 100dvh;
   background: var(--surface);
 }
+
+/* ---------- simple mode ---------- */
+
+.simple {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.stabs {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.stabs a {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  border-radius: 9px;
+  font-size: 14px;
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.stabs a:hover {
+  color: var(--text);
+}
+
+.stabs a[aria-current='page'] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.stabs .count {
+  min-width: 0;
+  margin-left: 5px;
+}
+
+.stabs a[aria-current='page'] .count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tab-list,
+.history {
+  display: grid;
+  gap: 10px;
+}
+
+.history {
+  justify-items: stretch;
+}
+
+.history > .summary {
+  margin: 0;
+}
+
+.quick-add {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.quick-add input[data-quick-add] {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+.due-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.due-row .field-label {
+  font-size: 12px;
+}
+
+.tasks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: opacity 0.2s, background 0.2s;
+}
+
+input.task-check {
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  cursor: pointer;
+}
+
+button.task-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: inherit;
+}
+
+button.task-main:hover {
+  background: transparent;
+}
+
+button.task-main:hover .task-title {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+}
+
+.task-title {
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.tag {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.tag-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.tag-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.tag-info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+/* งานที่ทำเสร็จ: ยังอยู่ แต่จางลง จะได้ย้อนดูได้ว่าทำไปแล้วจริง */
+.task[data-done='true'] {
+  background: transparent;
+  opacity: 0.55;
+}
+
+.task[data-done='true'] .task-title {
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+
+.task[data-done='true']:hover {
+  opacity: 0.85;
+}
+
+.done-head {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.history-day h3 {
+  margin: 6px 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.simple-form .spacer {
+  flex: 1;
+}
+
+button.danger-text {
+  color: var(--danger);
+}
+
+.app-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--text-3);
+}
+
+.app-foot .link-btn {
+  color: var(--text-2);
+}

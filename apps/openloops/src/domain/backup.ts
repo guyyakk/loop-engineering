@@ -6,7 +6,8 @@ import { isClosed, type Energy, type Horizon, type Loop, type LoopStatus, type S
 
 // ไฟล์สำรอง: JSON ที่อ่านได้ ตรวจทั้งไฟล์ก่อนนำเข้า ผิดตรงไหนก็ไม่แตะข้อมูลเดิม
 
-export const BACKUP_FORMAT = 1
+/** 2 = มีช่วง "เดือนนี้" และโหมดง่าย/ละเอียด (ยังอ่านไฟล์รุ่น 1 ได้) */
+export const BACKUP_FORMAT = 2
 export const MAX_BACKUP_BYTES = 10 * 1024 * 1024
 /** สำรองล่าสุดเกินกี่วันถึงเตือน */
 export const BACKUP_STALE_DAYS = 7
@@ -54,7 +55,7 @@ export function summarize(backup: Backup): BackupSummary {
 // ---------- ตรวจและเติมค่าเริ่มต้น ----------
 
 const STATUSES: LoopStatus[] = ['active', 'waiting', 'blocked', 'done', 'dropped']
-const HORIZONS: Horizon[] = ['today', 'week', 'later']
+const HORIZONS: Horizon[] = ['today', 'week', 'month', 'later']
 const ENERGIES: Energy[] = ['deep', 'shallow']
 const PARTICLES: Particle[] = ['', 'ครับ', 'ค่ะ']
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/
@@ -147,6 +148,7 @@ function parseSettings(raw: unknown): PlannerSettings {
     googleClientId: isText(s.googleClientId) && !validateClientId(s.googleClientId) ? s.googleClientId.trim() : null,
     calendarEnabled: typeof s.calendarEnabled === 'boolean' ? s.calendarEnabled : d.calendarEnabled,
     calendarSyncedAt: orNull(s.calendarSyncedAt, isTime),
+    detailed: typeof s.detailed === 'boolean' ? s.detailed : d.detailed,
   }
 }
 

@@ -32,12 +32,14 @@ describe('quick capture window', () => {
 
     await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1))
     const loops = await allLoops()
-    expect(loops.map((l) => [l.title, l.horizon])).toEqual([['โทรหาลูกค้า ABC', 'week']])
+    // โหมดง่าย (ค่าเริ่มต้น) จดลงรายการวันนี้
+    expect(loops.map((l) => [l.title, l.horizon])).toEqual([['โทรหาลูกค้า ABC', 'today']])
     expect(title().value).toBe('')
   })
 
   it('closes with Esc without saving, and focuses the title when shown again', async () => {
     const { onHide, show, user } = setup()
+    await waitFor(() => expect(document.activeElement).toBe(title()))
     await user.type(title(), 'ร่าง')
     await user.keyboard('{Escape}')
     expect(onHide).toHaveBeenCalledTimes(1)

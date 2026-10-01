@@ -69,7 +69,7 @@ export function loopFlags(loop: Loop, today: DateKey, settings: PlannerSettings)
   const overdue = loop.dueDate !== null && loop.dueDate < today
   const start = !overdue && loop.status !== 'waiting' ? latestStart(loop, settings) : null
   const idle =
-    (loop.status === 'active' || loop.status === 'blocked') && loop.horizon !== 'later'
+    (loop.status === 'active' || loop.status === 'blocked') && (loop.horizon === 'today' || loop.horizon === 'week')
       ? workdaysBetween(dateKeyOf(loop.lastProgressAt), today, settings.workdays)
       : 0
   return {

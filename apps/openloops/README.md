@@ -14,6 +14,8 @@ npm run build && npm run preview   # ลองแบบ PWA จริง (http:/
 
 ติดตั้งเป็นแอปบน Windows: เปิดหน้า preview ใน Chrome หรือ Edge แล้วกดไอคอนติดตั้งท้ายช่อง URL
 
+เปิดมาเป็นโหมดง่าย: แท็บ วันนี้ / สัปดาห์นี้ / เดือนนี้ พิมพ์งานแล้วกด Enter ติ๊กเมื่อเสร็จ (งานจางลงแต่ไม่หาย) และแท็บย้อนดูงานที่ทำเสร็จรายวัน ของละเอียด (เวลาว่าง, บอร์ดสัปดาห์, ปิดวัน/ทบทวน, AI, Google Calendar) เปิดได้จากลิงก์ "โหมดละเอียด" ท้ายหน้า
+
 ข้อมูลอยู่ใน browser ของเครื่องนั้นเท่านั้น สำรองเป็นไฟล์ได้ที่ "ข้อมูลและการสำรอง" (ลิงก์ท้ายหน้า หรือ `#data`) และนำไฟล์ไปนำเข้าในเครื่องอื่นได้
 
 เชื่อม Google Calendar (ไม่บังคับ): ใน "ตั้งเวลาและการแจ้งเตือน" → Google Calendar ใส่ OAuth Client ID ของคุณเอง (มีวิธีสร้างทีละขั้นในแอป; Authorized JavaScript origins ต้องเป็น origin ที่เปิดแอป เช่น `http://localhost:4173`) แอปขอแค่สิทธิ์ `calendar.freebusy` เห็นเฉพาะช่วงไม่ว่าง เก็บแค่จำนวนนาทีต่อวัน token อยู่ในหน่วยความจำเท่านั้น ปิดแอปแล้วต้องกด "ซิงก์อีกครั้ง"
@@ -45,6 +47,7 @@ npm run build
 - `src/db.ts` — Dexie/IndexedDB (v3: loops, days, settings และ local สำหรับค่าที่อยู่เฉพาะเครื่อง เช่น API key)
 - `src/domain/nudges.ts` — กติกาการเตือน (เลยกำหนด, ต้องเริ่มวันนี้, ตามงาน, ลูปนิ่ง), ข้อความตามงาน และเวลาแจ้งเตือน
 - `src/domain/backup.ts` — รูปแบบไฟล์สำรอง ตรวจไฟล์ก่อนนำเข้า รวม/แทนที่ และการเตือนให้สำรอง (หน้า `#data`)
+- `src/domain/simple.ts` + `src/components/SimpleView.tsx` / `SimpleForm.tsx` — โหมดง่าย: งานในแต่ละแท็บ, งานเสร็จอยู่ถึงเมื่อไหร่, ป้าย, ย้อนดูรายวัน
 - `src/domain/rituals.ts` — การตัดสินใจตอนปิดวัน (`#shutdown`) และทบทวนสัปดาห์ (`#review`)
 - `src/domain/calendar.ts` — ช่วงซิงก์, แปลงช่วงไม่ว่างเป็นนาทีในเวลางานต่อวัน, กติกาซิงก์อัตโนมัติ; `src/calendarClient.ts` + `src/useCalendar.ts` — Google Identity Services และ freeBusy API
 - `src/domain/ai.ts` — คำขอและการตรวจผลของผู้ช่วย AI (จดงานจากประโยค, แตกขั้น, แผนเช้า); `src/aiClient.ts` — เรียก Claude Messages API จาก browser

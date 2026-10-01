@@ -13,7 +13,7 @@ import {
   withDay,
   type DateKey,
 } from '../domain/dates'
-import type { Loop } from '../domain/loop'
+import { HORIZON_LABEL, type Loop } from '../domain/loop'
 import {
   applyDecisions,
   countDecisions,
@@ -181,13 +181,13 @@ export function WeeklyReview({ loops, today, settings, shutdownDates, onFinish, 
             <article key={loop.id} className="ritual-item">
               <div className="ri-head">
                 <span className="ri-title">{loop.title}</span>
-                <span className="badge">{loop.horizon === 'later' ? 'ไว้ก่อน' : 'สัปดาห์นี้ ไม่ระบุวัน'}</span>
+                <span className="badge">{loop.horizon === 'week' ? 'สัปดาห์นี้ ไม่ระบุวัน' : HORIZON_LABEL[loop.horizon]}</span>
                 {loop.estimateMinutes !== null && <span className="badge">{formatMinutes(loop.estimateMinutes)}</span>}
               </div>
               <DecisionPicker
                 label={`ลงวันให้ ${loop.title}`}
                 days={dayOptions}
-                options={loop.horizon === 'later' ? ['keep', 'drop'] : ['tray-later', 'drop', 'keep']}
+                options={loop.horizon === 'week' ? ['tray-later', 'drop', 'keep'] : ['keep', 'drop']}
                 value={plan[loop.id] ?? { kind: 'keep' }}
                 onChange={(d) => setPlan({ ...plan, [loop.id]: d })}
                 splitCarries={false}

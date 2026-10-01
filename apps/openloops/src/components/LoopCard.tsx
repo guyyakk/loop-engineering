@@ -17,6 +17,7 @@ import {
   advance,
   applyPlan,
   isClosed,
+  isTray,
   nextStep,
   progress,
   planValueOf,
@@ -164,7 +165,12 @@ function planOptions(today: DateKey): ChipOption<PlanValue>[] {
   }
   const nextMonday = addDays(sunday, 1)
   if (!days.some((o) => o.value === nextMonday)) days.push({ value: nextMonday, label: 'จันทร์หน้า' })
-  return [...days, { value: 'week', label: 'สัปดาห์นี้ ไม่ระบุวัน' }, { value: 'later', label: 'ไว้ก่อน' }]
+  return [
+    ...days,
+    { value: 'week', label: 'สัปดาห์นี้ ไม่ระบุวัน' },
+    { value: 'month', label: 'เดือนนี้' },
+    { value: 'later', label: 'ไว้ก่อน' },
+  ]
 }
 
 function estimateText(loop: Loop, closed: boolean): string | null {
@@ -476,7 +482,7 @@ export function LoopCard({ loop, today, onChange, onEdit, onPostpone, open, onTo
                   className="chip chip-date"
                   aria-label="เลือกวันทำเอง"
                   min={today}
-                  value={plan === 'week' || plan === 'later' ? '' : plan}
+                  value={isTray(plan) ? '' : plan}
                   data-custom={!plans.some((o) => o.value === plan)}
                   onChange={(e) => {
                     if (e.target.value && e.target.value >= today) change(applyPlan(loop, e.target.value, new Date()))

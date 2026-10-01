@@ -6,6 +6,8 @@ import { DataPage, type ImportMode } from './components/DataPage'
 import { Icon, Logo } from './components/Icon'
 import { LoopCard } from './components/LoopCard'
 import { ShutdownWizard, type RitualResult } from './components/ShutdownWizard'
+import { SimpleForm } from './components/SimpleForm'
+import { SimpleView } from './components/SimpleView'
 import { Attention } from './components/Attention'
 import { PlanAssist } from './components/PlanAssist'
 import { TodayPanel } from './components/TodayPanel'
@@ -44,9 +46,12 @@ import {
   emptyDraft,
   groupLoops,
   isClosed,
+  isTray,
   planValueOf,
+  progress,
   projectsOf,
   scheduleOn,
+  setStatus,
   type Horizon,
   type Loop,
   type LoopDraft,
@@ -54,6 +59,7 @@ import {
 } from './domain/loop'
 import { briefMessage, nudgesFor, pendingNotifications, shutdownMessage } from './domain/nudges'
 import { reviewDue } from './domain/rituals'
+import { applySimpleEdit, simpleDraft, valuesOf, type SimpleValues } from './domain/simple'
 import { isDesktop } from './desktop'
 import { downloadText } from './download'
 import { permissionState, showNotification } from './notifier'
@@ -62,9 +68,16 @@ import { useCalendar } from './useCalendar'
 type Editing = { mode: 'create'; draft: LoopDraft } | { mode: 'edit'; loop: Loop }
 /** undo คืนสภาพก่อนเปลี่ยน; long = การเปลี่ยนใหญ่ (พิธี, นำเข้า) ให้เวลาเลิกทำนานขึ้น */
 type Toast = { message: string; undo?: () => Promise<void>; long?: boolean }
-type View = 'today' | 'week' | 'shutdown' | 'review' | 'data'
+type View = 'today' | 'week' | 'month' | 'history' | 'shutdown' | 'review' | 'data'
 
-const VIEWS: Record<string, View> = { '#week': 'week', '#shutdown': 'shutdown', '#review': 'review', '#data': 'data' }
+const VIEWS: Record<string, View> = {
+  '#week': 'week',
+  '#month': 'month',
+  '#history': 'history',
+  '#shutdown': 'shutdown',
+  '#review': 'review',
+  '#data': 'data',
+}
 
 const DISMISS_KEY = 'openloops:backup-reminder-dismissed'
 
@@ -126,6 +139,7 @@ function useModal(ref: RefObject<HTMLDialogElement | null>, open: boolean) {
 
 function planLabel(target: PlanValue, today: string): string {
   if (target === 'week') return 'สัปดาห์นี้ (ไม่ระบุวัน)'
+  if (target === 'month') return 'เดือนนี้'
   if (target === 'later') return 'ไว้ก่อน'
   return withDay('', target, today).trim()
 }
@@ -133,9 +147,15 @@ function planLabel(target: PlanValue, today: string): string {
 export function App() {
   const loops = useLiveQuery(() => allLoops(), [])
   const today = useToday()
-  const view = useView()
+  const route = useView()
   const storedSettings = useLiveQuery(() => getSettings(), [])
   const settings = storedSettings ?? DEFAULT_SETTINGS
+  // รอโหลดการตั้งค่าก่อน จะได้ไม่กระพริบเป็นโหมดง่ายแล้วค่อยเปลี่ยน
+  const ready = storedSettings !== undefined
+  const simple = ready && !settings.detailed
+  const detailed = ready && settings.detailed
+  const view: View = detailed && (route === 'month' || route === 'history') ? 'today' : route
+  const listView = view === 'today' || view === 'week' || view === 'month' || view === 'history'
   const todayBusy = useLiveQuery(() => getBusy(today), [today]) ?? 0
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = addDays(startOfWeek(today), weekOffset * 7)
@@ -144,6 +164,7 @@ export function App() {
   const weekRows = useLiveQuery(() => getDays(thisWeek, addDays(thisWeek, 6)), [thisWeek])
   const [editing, setEditing] = useState<Editing | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [simpleEditId, setSimpleEditId] = useState<string | null>(null)
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set())
   const [toast, setToast] = useState<Toast | null>(null)
   const [dismissedOn, setDismissedOn] = useState<string | null>(readDismissed)
@@ -151,6 +172,7 @@ export function App() {
   const aiConfig = useLiveQuery(() => getAiConfig(), [])
   const dialogRef = useRef<HTMLDialogElement>(null)
   const detailRef = useRef<HTMLDialogElement>(null)
+  const simpleRef = useRef<HTMLDialogElement>(null)
 
   const groups = useMemo(() => groupLoops(loops ?? [], today), [loops, today])
   const projects = useMemo(() => projectsOf(loops ?? []), [loops])
@@ -173,13 +195,14 @@ export function App() {
   )
   const postponeDate = nextWorkday(today, settings.workdays)
   const detail = detailId ? (loops ?? []).find((l) => l.id === detailId) ?? null : null
+  const simpleEdit = simpleEditId ? (loops ?? []).find((l) => l.id === simpleEditId) ?? null : null
   const shutdownAt = weekRows?.find((d) => d.date === today)?.shutdownAt
   const shutdownDates = (weekRows ?? []).filter((d) => d.shutdownAt).map((d) => d.date)
   const showBackupPrompt =
     storedSettings !== undefined && backupReminder(settings.lastBackupAt, (loops ?? []).length, today, dismissedOn)
   const backupAge = backupAgeDays(settings.lastBackupAt, today)
   const showReviewPrompt = weekRows !== undefined && reviewDue(today, settings, (weekRows ?? []).filter((d) => d.reviewAt).map((d) => d.date))
-  const openCount = groups.today.length + groups.week.length + groups.later.length
+  const openCount = groups.today.length + groups.week.length + groups.month.length + groups.later.length
   const waitingCount = (loops ?? []).filter((l) => l.status === 'waiting').length
 
   // เปิดแอปหรือข้ามเที่ยงคืน: ยกงานที่ค้างเข้าวันนี้ รอให้โหลดวันทำงานจริงก่อน จะได้ไม่ยกผิดวัน
@@ -228,6 +251,7 @@ export function App() {
 
   useModal(dialogRef, editing !== null)
   useModal(detailRef, detail !== null)
+  useModal(simpleRef, simpleEdit !== null)
 
   const openCapture = useCallback((horizon: Horizon = 'week') => {
     setEditing({ mode: 'create', draft: emptyDraft(horizon) })
@@ -238,11 +262,21 @@ export function App() {
       if (e.key.toLowerCase() !== 'n' || e.ctrlKey || e.metaKey || e.altKey) return
       if (isTyping(e.target) || document.querySelector('dialog[open]')) return
       e.preventDefault()
-      openCapture()
+      if (!simple) {
+        openCapture()
+        return
+      }
+      // โหมดง่าย: ไปที่ช่องเพิ่มงานของแท็บนี้ ถ้าอยู่หน้าอื่นกลับไปแท็บวันนี้ก่อน
+      const input = document.querySelector<HTMLInputElement>('[data-quick-add]')
+      if (input) input.focus()
+      else {
+        window.location.hash = ''
+        window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-quick-add]')?.focus(), 50)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openCapture])
+  }, [openCapture, simple])
 
   useEffect(() => {
     if (!toast) return
@@ -256,6 +290,31 @@ export function App() {
     const loop = editing?.mode === 'edit' ? applyDraft(editing.loop, draft, now) : createLoop(draft, now)
     await saveLoop(loop)
     setEditing(null)
+  }
+
+  async function addSimple(values: SimpleValues) {
+    await saveLoop(createLoop(simpleDraft(values), new Date()))
+  }
+
+  /** ติ๊ก = เสร็จ (งานยังอยู่แต่จางลง), ติ๊กออก = กลับมาเป็นงานค้าง */
+  async function toggleSimple(loop: Loop) {
+    await saveLoop(setStatus(loop, loop.status === 'done' ? 'active' : 'done', new Date()))
+  }
+
+  async function saveSimpleEdit(loop: Loop, values: SimpleValues) {
+    await saveLoop(applySimpleEdit(loop, values, new Date()))
+    setSimpleEditId(null)
+  }
+
+  async function deleteSimple(loop: Loop) {
+    await saveLoop(setStatus(loop, 'dropped', new Date()))
+    setSimpleEditId(null)
+    setToast({ message: `ลบ "${loop.title}" แล้ว`, undo: () => saveLoops([loop]) })
+  }
+
+  async function setDetailed(on: boolean) {
+    await saveSettings({ ...settings, detailed: on })
+    window.location.hash = ''
   }
 
   async function handleChange(next: Loop, prev: Loop) {
@@ -274,7 +333,7 @@ export function App() {
 
   async function move(loop: Loop, target: PlanValue) {
     if (planValueOf(loop, today) === target) return
-    if (target !== 'week' && target !== 'later' && target < today) return
+    if (!isTray(target) && target < today) return
     await saveLoop(applyPlan(loop, target, new Date()))
     setToast({ message: `ย้าย "${loop.title}" ไป${planLabel(target, today)}แล้ว`, undo: () => saveLoops([loop]) })
   }
@@ -368,12 +427,29 @@ export function App() {
     onPostpone: (loop: Loop) => postpone([loop]),
   }
 
+  const backupPrompt = showBackupPrompt && (
+    <div className="ritual-prompt backup-prompt">
+      <span>
+        <strong>{backupAge === null ? 'ยังไม่เคยสำรองข้อมูล' : `ไม่ได้สำรองข้อมูลมา ${backupAge} วัน`}</strong> งานทั้งหมดอยู่ใน
+        browser นี้ที่เดียว ถ้า browser ล้างข้อมูล งานจะหาย
+      </span>
+      <span className="prompt-actions">
+        <button type="button" className="ghost" onClick={dismissBackupReminder}>
+          ไว้ทีหลัง
+        </button>
+        <button type="button" className="primary" onClick={() => void exportBackup()}>
+          สำรองตอนนี้
+        </button>
+      </span>
+    </div>
+  )
+
   const renderCard = (loop: Loop) => (
     <LoopCard key={loop.id} loop={loop} {...cardProps} open={openIds.has(loop.id)} onToggle={() => toggleOpen(loop.id)} />
   )
 
   return (
-    <div className={`app${view === 'week' ? ' wide' : ''}`}>
+    <div className={`app${detailed && view === 'week' ? ' wide' : ''}`}>
       <header className="top">
         <div className="brand">
           <Logo />
@@ -382,20 +458,44 @@ export function App() {
             <p className="muted">{formatLongDay(today)}</p>
           </div>
         </div>
-        <nav className="tabs" aria-label="มุมมอง">
-          <a href="#" aria-current={view === 'today' ? 'page' : undefined}>
-            วันนี้
-          </a>
-          <a href="#week" aria-current={view === 'week' ? 'page' : undefined}>
-            สัปดาห์
-          </a>
-        </nav>
-        <button type="button" className="primary capture-btn" onClick={() => openCapture()}>
-          <Icon name="plus" /> จดงาน <kbd>N</kbd>
-        </button>
+        {detailed && (
+          <>
+            <nav className="tabs" aria-label="มุมมอง">
+              <a href="#" aria-current={view === 'today' ? 'page' : undefined}>
+                วันนี้
+              </a>
+              <a href="#week" aria-current={view === 'week' ? 'page' : undefined}>
+                สัปดาห์
+              </a>
+            </nav>
+            <button type="button" className="primary capture-btn" onClick={() => openCapture()}>
+              <Icon name="plus" /> จดงาน <kbd>N</kbd>
+            </button>
+          </>
+        )}
       </header>
 
-      {loops && loops.length === 0 && (
+      {simple && loops && listView && (
+        <>
+          {backupPrompt}
+          {isDesktop() && loops.length === 0 && (
+            <p className="field-note">
+              เคยใช้ OpenLoops ใน browser มาก่อน? ข้อมูลของแอปนี้แยกจาก browser ส่งออกไฟล์สำรองจาก browser แล้ว{' '}
+              <a href="#data">นำเข้าที่นี่</a>
+            </p>
+          )}
+          <SimpleView
+            loops={loops}
+            today={today}
+            view={view as 'today' | 'week' | 'month' | 'history'}
+            onAdd={(values) => void addSimple(values)}
+            onToggle={(loop) => void toggleSimple(loop)}
+            onOpen={(loop) => setSimpleEditId(loop.id)}
+          />
+        </>
+      )}
+
+      {detailed && loops && loops.length === 0 && (
         <section className="empty">
           <h2>เริ่มจากจดงานแรกของคุณ</h2>
           <p>งานที่ยังไม่เสร็จทุกชิ้นจะอยู่ตรงนี้ จนกว่าคุณจะปิดมันเองอย่างตั้งใจ ไม่มีงานไหนหายไปเงียบ ๆ</p>
@@ -446,7 +546,7 @@ export function App() {
         />
       )}
 
-      {loops && loops.length > 0 && view === 'week' && (
+      {detailed && loops && loops.length > 0 && view === 'week' && (
         <WeekBoard
           plan={week}
           today={today}
@@ -461,7 +561,7 @@ export function App() {
         />
       )}
 
-      {loops && loops.length > 0 && view === 'today' && (
+      {detailed && loops && loops.length > 0 && view === 'today' && (
         <>
           <p className="summary">
             ลูปที่ยังเปิดอยู่ <strong>{openCount}</strong>
@@ -469,22 +569,7 @@ export function App() {
             {groups.closed.length > 0 && <> · ปิดแล้ว {groups.closed.length}</>}
           </p>
 
-          {showBackupPrompt && (
-            <div className="ritual-prompt backup-prompt">
-              <span>
-                <strong>{backupAge === null ? 'ยังไม่เคยสำรองข้อมูล' : `ไม่ได้สำรองข้อมูลมา ${backupAge} วัน`}</strong> งานทั้งหมดอยู่ใน
-                browser นี้ที่เดียว ถ้า browser ล้างข้อมูล งานจะหาย
-              </span>
-              <span className="prompt-actions">
-                <button type="button" className="ghost" onClick={dismissBackupReminder}>
-                  ไว้ทีหลัง
-                </button>
-                <button type="button" className="primary" onClick={() => void exportBackup()}>
-                  สำรองตอนนี้
-                </button>
-              </span>
-            </div>
-          )}
+          {backupPrompt}
 
           {showReviewPrompt && (
             <div className="ritual-prompt">
@@ -528,7 +613,7 @@ export function App() {
             />
           )}
 
-          {(['today', 'week', 'later'] as const).map((h) => (
+          {(['today', 'week', 'month', 'later'] as const).map((h) => (
             <section key={h} className="section" aria-labelledby={`sec-${h}`}>
               <div className="section-head">
                 <h2 id={`sec-${h}`}>
@@ -559,9 +644,13 @@ export function App() {
         </>
       )}
 
-      {loops && (view === 'today' || view === 'week') && (
+      {loops && ready && listView && (
         <footer className="app-foot">
           <a href="#data">ข้อมูลและการสำรอง</a>
+          <span aria-hidden="true">·</span>
+          <button type="button" className="link-btn" onClick={() => void setDetailed(!settings.detailed)}>
+            {settings.detailed ? 'กลับไปโหมดง่าย' : 'โหมดละเอียด (เวลาว่าง บอร์ด AI ปฏิทิน)'}
+          </button>
         </footer>
       )}
 
@@ -591,6 +680,21 @@ export function App() {
             </div>
             <LoopCard loop={detail} {...cardProps} open onToggle={() => setDetailId(null)} />
           </div>
+        )}
+      </dialog>
+
+      <dialog ref={simpleRef} className="sheet" onClose={() => setSimpleEditId(null)} aria-label="แก้ไขงาน">
+        {simpleEdit && (
+          <SimpleForm
+            key={simpleEdit.id}
+            mode="edit"
+            initial={valuesOf(simpleEdit)}
+            today={today}
+            steps={progress(simpleEdit)}
+            onSave={(values) => void saveSimpleEdit(simpleEdit, values)}
+            onCancel={() => setSimpleEditId(null)}
+            onDelete={() => void deleteSimple(simpleEdit)}
+          />
         )}
       </dialog>
 

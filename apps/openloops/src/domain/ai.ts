@@ -397,7 +397,8 @@ export function planPool(loops: Loop[]): Loop[] {
 function whereOf(loop: Loop): string {
   if (loop.horizon === 'today') return 'today'
   if (loop.plannedDate) return `planned ${loop.plannedDate}`
-  return loop.horizon === 'week' ? 'this-week tray' : 'later'
+  if (loop.horizon === 'week') return 'this-week tray'
+  return loop.horizon === 'month' ? 'this-month list' : 'later'
 }
 
 function flagsOf(loop: Loop, ctx: PlanContext): string[] {

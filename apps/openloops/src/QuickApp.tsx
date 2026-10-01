@@ -2,10 +2,12 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState } from 'react'
 import { makeAssist } from './aiClient'
 import { CaptureForm } from './components/CaptureForm'
+import { SimpleForm } from './components/SimpleForm'
 import { allLoops, getAiConfig, getSettings, saveLoop } from './db'
 import { DEFAULT_SETTINGS } from './domain/capacity'
 import { toDateKey } from './domain/dates'
 import { createLoop, emptyDraft, projectsOf, type LoopDraft } from './domain/loop'
+import { simpleDraft, type SimpleValues } from './domain/simple'
 
 interface Props {
   /** ซ่อนหน้าต่างนี้ (ในแอป Windows) */
@@ -22,7 +24,8 @@ const focusTitle = () => document.querySelector<HTMLElement>('[data-autofocus]')
  */
 export function QuickApp({ onHide, onShow }: Props) {
   const loops = useLiveQuery(() => allLoops(), [])
-  const settings = useLiveQuery(() => getSettings(), []) ?? DEFAULT_SETTINGS
+  const stored = useLiveQuery(() => getSettings(), [])
+  const settings = stored ?? DEFAULT_SETTINGS
   const aiConfig = useLiveQuery(() => getAiConfig(), [])
   const [today, setToday] = useState(() => toDateKey(new Date()))
   // เปลี่ยน key เพื่อเริ่มฟอร์มใหม่หลังบันทึกหรือยกเลิก งานที่พิมพ์ค้างตอนคลิกไปที่อื่นยังอยู่
@@ -43,10 +46,11 @@ export function QuickApp({ onHide, onShow }: Props) {
     [onShow],
   )
 
-  // เริ่มฟอร์มใหม่แล้วให้พิมพ์ต่อได้ทันที
+  // เริ่มฟอร์มใหม่ (หรือฟอร์มเพิ่งขึ้นหลังโหลดการตั้งค่า) แล้วให้พิมพ์ต่อได้ทันที
+  const formReady = stored !== undefined
   useEffect(() => {
     focusTitle()
-  }, [round])
+  }, [round, formReady])
 
   function close() {
     setRound((r) => r + 1)
@@ -66,18 +70,32 @@ export function QuickApp({ onHide, onShow }: Props) {
     close()
   }
 
+  // โหมดง่าย: ฟอร์มสั้น ชื่องาน + รายการ + เสร็จภายใน, เริ่มที่ "วันนี้"
+  const simpleStart: SimpleValues = { title: '', tab: 'today', dueDate: null }
+
   return (
     <main className="quick-app">
-      <CaptureForm
-        key={round}
-        mode="create"
-        initial={emptyDraft('week')}
-        projects={projects}
-        today={today}
-        onSave={(draft) => void save(draft)}
-        onCancel={close}
-        ai={ai}
-      />
+      {stored === undefined ? null : settings.detailed ? (
+        <CaptureForm
+          key={round}
+          mode="create"
+          initial={emptyDraft('week')}
+          projects={projects}
+          today={today}
+          onSave={(draft) => void save(draft)}
+          onCancel={close}
+          ai={ai}
+        />
+      ) : (
+        <SimpleForm
+          key={round}
+          mode="create"
+          initial={simpleStart}
+          today={today}
+          onSave={(values) => void save(simpleDraft(values))}
+          onCancel={close}
+        />
+      )}
     </main>
   )
 }

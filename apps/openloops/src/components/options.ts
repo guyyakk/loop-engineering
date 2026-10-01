@@ -1,7 +1,7 @@
 import { ENERGY_LABEL, HORIZON_LABEL, type Energy, type Horizon } from '../domain/loop'
 import type { ChipOption } from './Chips'
 
-export const HORIZON_OPTIONS: ChipOption<Horizon>[] = (['today', 'week', 'later'] as const).map((h) => ({
+export const HORIZON_OPTIONS: ChipOption<Horizon>[] = (['today', 'week', 'month', 'later'] as const).map((h) => ({
   value: h,
   label: HORIZON_LABEL[h],
 }))

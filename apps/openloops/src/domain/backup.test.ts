@@ -147,3 +147,19 @@ describe('calendar fields in backups', () => {
     expect(JSON.stringify(result)).not.toContain('should-never-be-kept')
   })
 })
+
+describe('simple mode fields in backups', () => {
+  it('keeps month loops and the mode, and still reads format 1 files without them', () => {
+    const month = createLoop({ ...emptyDraft('month'), title: 'แผนเดือน' }, now, 'm1')
+    const backup = makeBackup([month], [], { ...DEFAULT_SETTINGS, detailed: true }, now)
+    const result = parseBackup(JSON.stringify(backup))
+    expect(result.ok && result.backup.loops[0].horizon).toBe('month')
+    expect(result.ok && result.backup.settings.detailed).toBe(true)
+
+    const old = JSON.parse(JSON.stringify(sample()))
+    old.format = 1
+    delete old.settings.detailed
+    const oldResult = parseBackup(JSON.stringify(old))
+    expect(oldResult.ok && oldResult.backup.settings.detailed).toBe(false)
+  })
+})
