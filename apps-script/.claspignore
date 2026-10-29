@@ -1,0 +1,5 @@
+# push เฉพาะไฟล์สคริปต์ ฟอร์ม และ manifest — ไม่ push README หรือ tests/
+**/**
+!*.gs
+!*.html
+!appsscript.json
