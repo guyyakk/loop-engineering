@@ -41,7 +41,7 @@ Status: เสร็จ
 | AC3 | `node scripts/check-docs.mjs` ในโฟลเดอร์ทำงาน + ในสำเนาจาก `git archive HEAD` ที่ทับด้วยไฟล์ของงานนี้ | Pass | โฟลเดอร์ทำงาน: ลิงก์ 71, spec 14 (รวม nutrition API ที่ยังไม่ commit); สำเนา: ไม่มีไฟล์ nutrition API, test 30/30 และตัวตรวจผ่าน ลิงก์ 70, spec 13 |
 | AC4 | `git diff` ของ `verify.yml` + ตรวจโครงสร้าง (ไม่มี tab, ย่อหน้าเป็นคู่, `docs:` อยู่ระดับเดียวกับ `verify:`) | Pass | diff เป็นการเพิ่มต่อท้ายล้วน job เดิมไม่เปลี่ยน; ในเครื่องไม่มีตัว parse YAML (Python ไม่มี PyYAML) จึงยืนยันด้วยโครงสร้าง — GitHub จะ parse จริงตอน push |
 | AC5 | `git diff` + grep ข้อความเดิม "None เท่านั้น" / "ไม่มีข้อตรวจโดยคน" / "ทุกเกณฑ์ Pass" | Pass | ไม่เหลือในไฟล์กติกา (เจอเฉพาะใน spec นี้ที่อธิบายปัญหา); LOOP_WORKFLOW มีหัวข้อ "8) ตรวจกติกาด้วยเครื่อง" พร้อมตารางสิ่งที่ตรวจและส่วนที่ยังต้องใช้วิจารณญาณ |
-| CI บน GitHub | หน้า Actions หลัง push | Not run | ต้อง push ก่อน (รอคำสั่ง); รันคำสั่งเดียวกันบนสำเนาจาก git แล้วตาม AC3 |
+| CI บน GitHub | GitHub Actions run 40895350010 (push `17d0591`) อ่านผลผ่าน GitHub API | Pass | job `verify` (OpenLoops: Install, Typecheck, Test, Build) และ job `docs` (Test docs checker, Check docs) ผ่านทุกขั้น |
 | แอป | `apps/openloops` typecheck/test/build | Not run | ไม่ได้แตะโค้ดแอป; job ของแอปใน CI ไม่เปลี่ยน |
 
 ## Loop log
