@@ -18,5 +18,6 @@
 - ห้าม deploy, merge, หรือเปลี่ยนข้อมูลจริงโดยไม่มีการยืนยันจากคน
 - บันทึกคำสั่งตรวจและผลที่ได้เสมอ เพื่อให้ทำซ้ำและ review ได้
 - ส่วนที่ AI ตรวจเองไม่ได้รวมอยู่ใน [docs/HUMAN_CHECKS.md](docs/HUMAN_CHECKS.md) และทุกครั้งที่ loop ไม่ราบรื่นต้องบันทึกใน [docs/RETRO.md](docs/RETRO.md)
+- กติกาที่ตรวจด้วยเครื่องได้ถูกตรวจด้วย `node scripts/check-docs.mjs` ทั้งในเครื่องและใน CI — ดูหัวข้อ "ตรวจกติกาด้วยเครื่อง" ใน [docs/LOOP_WORKFLOW.md](docs/LOOP_WORKFLOW.md)
 
 ดูรายละเอียดได้ที่ [docs/LOOP_WORKFLOW.md](docs/LOOP_WORKFLOW.md)

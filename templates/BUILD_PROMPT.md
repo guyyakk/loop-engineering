@@ -16,5 +16,6 @@
 
 ห้าม merge, deploy, เปิด PR หรือแก้ข้อมูลจริงเอง
 ก่อนจบ: ตั้ง Status: ของ spec, คัดลอกข้อตรวจโดยคนไปที่ docs/HUMAN_CHECKS.md, และเพิ่มแถวใน docs/RETRO.md ถ้าครบ 3 รอบ / ติด blocker / มีข้อตรวจโดยคน / Not run ด้วยเหตุผลเดิมซ้ำจาก spec ก่อน
+แล้วรัน node scripts/check-docs.mjs ให้ผ่าน
 แล้วสรุปไฟล์ที่เปลี่ยน, ผลตรวจราย acceptance criterion, ความเสี่ยงคงเหลือ และสิ่งที่ต้องให้คนตัดสินใจ
 ```
